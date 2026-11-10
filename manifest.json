@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "id": "ilm.alienware-fx",
+  "name": "Alienware FX",
+  "version": "0.4.0",
+  "author": "ilm",
+  "license": "MIT",
+  "description": "Alienware Command Center replacement for the Omarchy bar, plus theme-matched lighting. Fan readouts and an additive boost curve, thermal profiles, turbo and power limits, chassis RGB and per key keyboard lighting, and a Theme panel that blends a perceptual diagonal gradient from the active Omarchy theme across the keyboard and chassis. All hardware access goes through the alienwarectl helper.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Alienware FX",
+    "description": "Fans, thermal profiles, power limits, keyboard RGB and theme-matched lighting in one panel.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "pollInterval": 2,
+      "hotTemp": 90,
+      "display": "cpu"
+    },
+    "schema": [
+      {
+        "key": "pollInterval",
+        "type": "integer",
+        "label": "Seconds between hardware polls",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 2
+      },
+      {
+        "key": "hotTemp",
+        "type": "integer",
+        "label": "Temperature that turns the bar widget hot (C)",
+        "min": 50,
+        "max": 110,
+        "step": 1,
+        "defaultValue": 90
+      },
+      {
+        "key": "display",
+        "type": "string",
+        "label": "Bar shows, comma separated: logo, mode, cpu, gpu, fan, gpuPower",
+        "defaultValue": "cpu"
+      }
+    ]
+  }
+}

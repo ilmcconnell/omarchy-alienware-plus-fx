@@ -1,0 +1,10 @@
+{
+  "name": "omarchy-alienware-fx",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Alienware Command Center replacement for the Omarchy bar",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}
