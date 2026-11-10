@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -134,10 +135,10 @@ Panel {
   }
   readonly property var themeRibbon: ThemeFx.ribbon(root.themePlan.near, root.themePlan.far, 24)
   readonly property var themeChassisOrder: [
-    { id: "logo", label: "Lid logo", icon: "󰢚" },
-    { id: "ring-top", label: "Ring top", icon: "󰋙" },
-    { id: "ring-bottom", label: "Ring bottom", icon: "󰋘" },
-    { id: "power", label: "Power", icon: "⏻" }
+    { id: "logo", label: "Logo", name: "Lid logo" },
+    { id: "ring-top", label: "Ring ↑", name: "Ring top" },
+    { id: "ring-bottom", label: "Ring ↓", name: "Ring bottom" },
+    { id: "power", label: "Power", name: "Power button" }
   ]
   readonly property bool allChassisOff: {
     var map = root.regionPoweredMap
@@ -209,7 +210,10 @@ Panel {
     root.setRgbSubTab(keys[next])
   }
 
+  onTabChanged: panelFlick.contentY = 0
+
   onRgbSubTabChanged: {
+    panelFlick.contentY = 0
     if (!root.rgbSubTabLoaded) return
     rgbSubTabSaveTimer.restart()
   }
@@ -648,1334 +652,1360 @@ Panel {
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) { root.handleTextKey(t) }
 
-      Column {
-        id: column
+      Flickable {
+        id: panelFlick
         anchors.fill: parent
-        spacing: Style.space(12)
-
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, headerActions.implicitHeight)
-
-          Text {
-            id: heroIcon
-            textFormat: Text.PlainText
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.heroGlyph
-            color: root.available ? root.accent : root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.display
-            opacity: root.available ? 1.0 : 0.5
-          }
-
-          Column {
-            id: heroLabels
-            anchors.left: heroIcon.right
-            anchors.leftMargin: Style.space(14)
-            anchors.right: headerActions.left
-            anchors.rightMargin: Style.space(10)
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
-
-            Text {
-              text: root.hw.model ? String(root.hw.model) : "Alienware"
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.title
-              font.bold: true
-              elide: Text.ElideRight
-              width: parent.width
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              text: root.statusCaps
-              color: root.health === "error" || root.health === "missing" ? root.urgentColor : root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
-              font.letterSpacing: 1.2
-              elide: Text.ElideRight
-              width: parent.width
-            }
-          }
-
-          Row {
-            id: headerActions
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
-
-            PanelActionButton {
-              iconText: root.service && root.service.lightsOn ? "󱄄" : "󰛨"
-              tooltipText: root.service && root.service.lightsOn ? "Turn the lights off (o)" : "Turn the lights on (o)"
-              enabled: root.rgbConnected
-              foreground: root.fg
-              fontFamily: root.fontFamily
-              hasCursor: root.service ? root.service.lightsOn : false
-              onClicked: if (root.service) root.service.toggleLights()
-            }
-            PanelActionButton {
-              iconText: "󰑓"
-              tooltipText: "Re-read the hardware (r)"
-              foreground: root.fg
-              fontFamily: root.fontFamily
-              onClicked: if (root.service) root.service.reload()
-            }
-            PanelActionButton {
-              iconText: "󰒓"
-              tooltipText: root.settingsOpen ? "Back (s)" : "Settings (s)"
-              foreground: root.fg
-              fontFamily: root.fontFamily
-              hasCursor: root.settingsOpen
-              onClicked: root.toggleSettings()
-            }
-          }
-        }
-
-        Card {
-          visible: root.health === "missing" && !root.settingsOpen
-          edge: root.urgentColor
-
-          Text {
-            width: parent.width
-            wrapMode: Text.Wrap
-            text: root.service ? root.service.statusLine : "Loading"
-            color: root.urgentColor
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            font.bold: true
-          }
-
-          Text {
-            width: parent.width
-            wrapMode: Text.Wrap
-            text: "The alienwarectl helper is not installed. The button opens a terminal so you can see every command before it runs. By hand: cd packaging/bin && makepkg -si"
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
-
-          Button {
-            iconText: "󰏗"
-            text: "Install the helper"
-            bordered: true
-            focusable: true
-            foreground: root.fg
-            fontFamily: root.fontFamily
-            fontSize: Style.font.caption
-            onClicked: if (root.service) root.service.installHelper()
-          }
-        }
-
-        Card {
-          id: modeCard
-          visible: !root.settingsOpen && root.available
-
-          CardTitle {
-            title: "THERMAL MODE"
-            detail: root.hw.profile.current ? Model.profileLabel(root.hw.profile.current, root.hw.profile.gmodeForced) : ""
-          }
-
-          Row {
-            id: modeRow
-            width: parent.width
-            spacing: Style.space(4)
-            readonly property var choices: root.service ? Model.toList(root.service.profileChoices) : []
-            readonly property real cell: choices.length ? (width - spacing * (choices.length - 1)) / choices.length : width
-
-            Repeater {
-              model: modeRow.choices
-
-              Rectangle {
-                id: modeTile
-                required property var modelData
-                required property int index
-                readonly property bool current: root.hw.profile.current === modelData
-                readonly property bool usable: root.available && root.hw.profile.writable
-                width: modeRow.cell
-                height: modeCol.implicitHeight + Style.space(14)
-                radius: Math.max(Style.cornerRadius, Style.space(3))
-                color: current ? Util.alpha(root.accent, 0.22) : (modeMouse.containsMouse && usable ? Style.hoverFillFor(root.fg, root.accent) : "transparent")
-                border.width: current ? Math.max(2, Style.normalBorderWidth * 2) : Style.normalBorderWidth
-                border.color: current ? root.accent : Util.alpha(root.fg, 0.18)
-                opacity: usable ? 1.0 : 0.5
-                Behavior on color { ColorAnimation { duration: 140 } }
-
-                Column {
-                  id: modeCol
-                  anchors.centerIn: parent
-                  width: parent.width - Style.space(8)
-                  spacing: Style.space(3)
-
-                  Text {
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    textFormat: Text.PlainText
-                    text: Model.profileGlyph(modeTile.modelData)
-                    color: modeTile.current ? root.accent : root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.title
-                  }
-
-                  Text {
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    textFormat: Text.PlainText
-                    text: Model.profileLabel(modeTile.modelData, root.hw.profile.gmodeForced)
-                    color: modeTile.current ? root.fg : root.dim
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                    font.bold: modeTile.current
-                    elide: Text.ElideRight
-                  }
-                }
-
-                MouseArea {
-                  id: modeMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  enabled: modeTile.usable
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: if (root.service) root.service.setProfile(modeTile.modelData)
-                }
-              }
-            }
-          }
-
-          Text {
-            width: parent.width
-            wrapMode: Text.Wrap
-            visible: root.service ? root.service.profileWarning !== "" : false
-            text: "󰀦  " + (root.service ? root.service.profileWarning : "")
-            color: root.urgentColor
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
-        }
-
-        Rectangle {
-          id: tabStrip
-          width: parent.width
-          height: tabRow.implicitHeight + Style.space(6)
-          visible: !root.settingsOpen
-          radius: Math.max(Style.cornerRadius, Style.space(4))
-          color: Style.normalFillFor(root.fg, root.accent)
-          border.color: Util.alpha(root.fg, 0.15)
-          border.width: Style.normalBorderWidth
-
-          Row {
-            id: tabRow
-            anchors.centerIn: parent
-            width: parent.width - Style.space(6)
-            spacing: Style.space(3)
-
-            Repeater {
-              model: root.tabs
-
-              Rectangle {
-                id: tabTile
-                required property var modelData
-                readonly property bool current: root.tab === modelData.key
-                width: (tabRow.width - tabRow.spacing * (root.tabs.length - 1)) / root.tabs.length
-                height: tabLabel.implicitHeight + Style.space(12)
-                radius: Math.max(Style.cornerRadius - 2, Style.space(3))
-                color: current ? Util.alpha(root.fg, 0.14) : (tabMouse.containsMouse ? Util.alpha(root.fg, 0.06) : "transparent")
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                Text {
-                  id: tabLabel
-                  anchors.centerIn: parent
-                  textFormat: Text.PlainText
-                  text: tabTile.modelData.icon + "  " + tabTile.modelData.label
-                  color: tabTile.current ? root.fg : root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  font.bold: tabTile.current
-                }
-
-                Rectangle {
-                  visible: tabTile.current
-                  anchors.bottom: parent.bottom
-                  anchors.horizontalCenter: parent.horizontalCenter
-                  width: Style.space(24)
-                  height: Math.max(2, Style.space(2))
-                  radius: height / 2
-                  color: root.accent
-                }
-
-                MouseArea {
-                  id: tabMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.setTab(tabTile.modelData.key)
-                }
-              }
-            }
-          }
+        contentWidth: width
+        contentHeight: column.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar {
+          id: panelScroll
+          policy: ScrollBar.AsNeeded
         }
 
         Column {
-          id: fansTab
-          width: parent.width
+          id: column
+          width: panelFlick.width - (panelFlick.interactive ? panelScroll.width + Style.space(6) : 0)
           spacing: Style.space(12)
-          visible: root.tab === "fans" && !root.settingsOpen
-
-          Row {
-            id: fanCards
-            width: parent.width
-            spacing: Style.space(8)
-            readonly property real cardWidth: (width - spacing) / 2
-
-            FanCard {
-              width: fanCards.cardWidth
-              fan: root.cpuFan
-              temp: root.cpuTemp
-              stale: root.stale
-              hotTemp: root.hotTemp
-              fg: root.fg
-              dim: root.dim
-              accent: root.accent
-              alertColor: root.urgentColor
-              fontFamily: root.fontFamily
-            }
-
-            FanCard {
-              width: fanCards.cardWidth
-              fan: root.gpuFan
-              temp: root.gpuTemp
-              stale: root.stale
-              hotTemp: root.hotTemp
-              fg: root.fg
-              dim: root.dim
-              accent: root.accent
-              alertColor: root.urgentColor
-              fontFamily: root.fontFamily
-            }
-          }
-
-          Card {
-            CardTitle {
-              title: "BOOST CURVE"
-              detail: root.hw.curve.active ? "Running" : "Idle"
-              detailColor: root.hw.curve.active ? root.accent : root.dim
-
-              ButtonGroup {
-                options: [{ value: "cpu", label: "CPU fan" }, { value: "gpu", label: "GPU fan" }]
-                value: root.curveFan
-                foreground: root.fg
-                accent: root.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                focusable: false
-                onChanged: function(v) { root.curveFan = v; root.pointCursor = 0 }
-              }
-            }
-
-            CurveEditor {
-              width: parent.width
-              points: root.curvePoints
-              floorPercent: root.curveFloor
-              currentTemp: root.curveTemp
-              selectedIndex: root.pointCursor
-              editable: root.available
-              fg: root.fg
-              dim: root.dim
-              accent: root.accent
-              alertColor: root.urgentColor
-              fontFamily: root.fontFamily
-              onEdited: function(next) { root.setCurvePoints(next) }
-              onPointPicked: function(index) { root.pointCursor = index }
-            }
-
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(presetFlow.implicitHeight, curveActions.implicitHeight)
-
-              Flow {
-                id: presetFlow
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - curveActions.implicitWidth - Style.space(12)
-                spacing: Style.space(4)
-
-                Repeater {
-                  model: Model.presetNames()
-
-                  Button {
-                    required property var modelData
-                    required property int index
-                    text: modelData.charAt(0).toUpperCase() + modelData.slice(1)
-                    tooltipText: "Preset " + (index + 1)
-                    bordered: true
-                    foreground: root.fg
-                    fontFamily: root.fontFamily
-                    fontSize: Style.font.caption
-                    onClicked: root.applyPreset(modelData)
-                  }
-                }
-              }
-
-              Row {
-                id: curveActions
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(4)
-
-                Button {
-                  iconText: "󰑓"
-                  bordered: true
-                  foreground: root.fg
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
-                  tooltipText: "Back to the default points (0)"
-                  onClicked: if (root.service) root.service.resetCurve()
-                }
-
-                Button {
-                  iconText: "󰓛"
-                  text: "Stop"
-                  bordered: true
-                  enabled: root.available && root.hw.curve.active
-                  foreground: root.fg
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
-                  tooltipText: "Hand the fans back to firmware (x)"
-                  onClicked: if (root.service) root.service.stopCurve()
-                }
-
-                Button {
-                  iconText: "󰐊"
-                  text: root.hw.curve.active ? "Update" : "Apply"
-                  bordered: true
-                  selected: true
-                  enabled: root.available
-                  foreground: root.fg
-                  accent: root.accent
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
-                  tooltipText: "Send the curve to the daemon (a)"
-                  onClicked: if (root.service) root.service.applyCurve()
-                }
-              }
-            }
-
-            Row {
-              width: parent.width
-              spacing: Style.space(16)
-
-              ValueSlider {
-                width: (parent.width - parent.spacing) / 2
-                label: "Hysteresis"
-                valueText: (root.service ? root.service.curveHysteresis : 3) + " °C"
-                value: root.service ? root.service.curveHysteresis : 3
-                from: 0
-                to: 15
-                stepSize: 1
-                note: "Drop needed before the boost steps down"
-                fg: root.fg
-                dim: root.dim
-                fontFamily: root.fontFamily
-                onMoved: function(next) { if (root.service) root.service.setCurveHysteresis(next) }
-              }
-
-              ValueSlider {
-                width: (parent.width - parent.spacing) / 2
-                label: "Interval"
-                valueText: (root.service ? root.service.curveInterval : 2) + " s"
-                value: root.service ? root.service.curveInterval : 2
-                from: 1
-                to: 30
-                stepSize: 1
-                note: "How often the daemon re-reads temperatures"
-                fg: root.fg
-                dim: root.dim
-                fontFamily: root.fontFamily
-                onMoved: function(next) { if (root.service) root.service.setCurveInterval(next) }
-              }
-            }
-          }
-        }
-
-        Column {
-          id: rgbTab
-          width: parent.width
-          spacing: Style.space(12)
-          visible: root.tab === "rgb" && !root.settingsOpen
-
-          Text {
-            width: parent.width
-            wrapMode: Text.Wrap
-            visible: !root.rgbConnected
-            text: "󰀦  " + (root.rgbError !== "" ? root.rgbError : "Waiting for the lighting controller")
-            color: root.urgentColor
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
-
-          Card {
-            Row {
-              id: switchRow
-              width: parent.width
-              spacing: Style.space(10)
-              readonly property real cell: (width - spacing * 2) / 3
-
-              SwitchTile {
-                width: switchRow.cell
-                icon: "󱄄"
-                title: "Lighting"
-                detail: root.rgb.device.ready ? (root.service && root.service.lightsOn ? "On" : "Off") : "No controller"
-                checked: root.service ? root.service.lightsOn : false
-                enabled: root.rgbConnected
-                onToggled: if (root.service) root.service.toggleLights()
-              }
-
-              SwitchTile {
-                width: switchRow.cell
-                icon: "󰏘"
-                title: "Match theme"
-                detail: !root.themeOn ? "Off" : (root.themePlan.style === "accent" ? "Accent" : ThemeFx.prettyName(root.themePlan.nearName) + " → " + ThemeFx.prettyName(root.themePlan.farName))
-                checked: root.service ? root.service.themeSync : false
-                enabled: root.rgbConnected
-                onToggled: if (root.service) root.service.toggleThemeSync()
-              }
-
-              SwitchTile {
-                width: switchRow.cell
-                icon: "󰂄"
-                title: "Battery on ⏻"
-                detail: root.service && root.service.batterySync ? root.batteryLine : "Power button is yours"
-                checked: root.service ? root.service.batterySync : true
-                enabled: root.rgbConnected
-                onToggled: if (root.service) root.service.toggleBatterySync()
-              }
-            }
-
-            ValueSlider {
-              width: parent.width
-              label: "Brightness"
-              valueText: (root.service ? root.service.brightness : 100) + "%"
-              value: root.service ? root.service.brightness : 100
-              from: 0
-              to: 100
-              stepSize: 5
-              editable: root.rgbConnected
-              fg: root.fg
-              dim: root.dim
-              fontFamily: root.fontFamily
-              onMoved: function(next) { if (root.service) root.service.setBrightness(next) }
-            }
-          }
 
           Item {
             width: parent.width
-            implicitHeight: Math.max(surfaceGroup.implicitHeight, surfaceActions.implicitHeight)
+            implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, headerActions.implicitHeight)
 
-            ButtonGroup {
-              id: surfaceGroup
+            Text {
+              id: heroIcon
+              textFormat: Text.PlainText
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-              options: root.kbdPresent
-                ? [{ value: "keyboard", label: "󰌌  Keyboard" }, { value: "chassis", label: "󰢚  Chassis" }, { value: "theme", label: "󰏘  Theme" }]
-                : [{ value: "chassis", label: "󰢚  Chassis" }, { value: "theme", label: "󰏘  Theme" }]
-              value: root.rgbSubTabEffective
-              foreground: root.fg
-              accent: root.accent
-              fontFamily: root.fontFamily
-              fontSize: Style.font.caption
-              focusable: false
-              onChanged: function(v) { root.setRgbSubTab(v) }
+              text: root.heroGlyph
+              color: root.available ? root.accent : root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.display
+              opacity: root.available ? 1.0 : 0.5
+            }
+
+            Column {
+              id: heroLabels
+              anchors.left: heroIcon.right
+              anchors.leftMargin: Style.space(14)
+              anchors.right: headerActions.left
+              anchors.rightMargin: Style.space(10)
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
+
+              Text {
+                text: root.hw.model ? String(root.hw.model) : "Alienware"
+                color: root.fg
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.title
+                font.bold: true
+                elide: Text.ElideRight
+                width: parent.width
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                text: root.statusCaps
+                color: root.health === "error" || root.health === "missing" ? root.urgentColor : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                font.letterSpacing: 1.2
+                elide: Text.ElideRight
+                width: parent.width
+              }
             }
 
             Row {
-              id: surfaceActions
+              id: headerActions
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
+
+              PanelActionButton {
+                iconText: root.service && root.service.lightsOn ? "󱄄" : "󰛨"
+                tooltipText: root.service && root.service.lightsOn ? "Turn the lights off (o)" : "Turn the lights on (o)"
+                enabled: root.rgbConnected
+                foreground: root.fg
+                fontFamily: root.fontFamily
+                hasCursor: root.service ? root.service.lightsOn : false
+                onClicked: if (root.service) root.service.toggleLights()
+              }
+              PanelActionButton {
+                iconText: "󰑓"
+                tooltipText: "Re-read the hardware (r)"
+                foreground: root.fg
+                fontFamily: root.fontFamily
+                onClicked: if (root.service) root.service.reload()
+              }
+              PanelActionButton {
+                iconText: "󰒓"
+                tooltipText: root.settingsOpen ? "Back (s)" : "Settings (s)"
+                foreground: root.fg
+                fontFamily: root.fontFamily
+                hasCursor: root.settingsOpen
+                onClicked: root.toggleSettings()
+              }
+            }
+          }
+
+          Card {
+            visible: root.health === "missing" && !root.settingsOpen
+            edge: root.urgentColor
+
+            Text {
+              width: parent.width
+              wrapMode: Text.Wrap
+              text: root.service ? root.service.statusLine : "Loading"
+              color: root.urgentColor
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+
+            Text {
+              width: parent.width
+              wrapMode: Text.Wrap
+              text: "The alienwarectl helper is not installed. The button opens a terminal so you can see every command before it runs. By hand: cd packaging/bin && makepkg -si"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Button {
+              iconText: "󰏗"
+              text: "Install the helper"
+              bordered: true
+              focusable: true
+              foreground: root.fg
+              fontFamily: root.fontFamily
+              fontSize: Style.font.caption
+              onClicked: if (root.service) root.service.installHelper()
+            }
+          }
+
+          Card {
+            id: modeCard
+            visible: !root.settingsOpen && root.available
+
+            CardTitle {
+              title: "THERMAL MODE"
+              detail: root.hw.profile.current ? Model.profileLabel(root.hw.profile.current, root.hw.profile.gmodeForced) : ""
+            }
+
+            Row {
+              id: modeRow
+              width: parent.width
               spacing: Style.space(4)
-              visible: root.rgbSubTabEffective !== "theme"
+              readonly property var choices: root.service ? Model.toList(root.service.profileChoices) : []
+              readonly property real cell: choices.length ? (width - spacing * (choices.length - 1)) / choices.length : width
 
-              Text {
-                anchors.verticalCenter: parent.verticalCenter
-                rightPadding: Style.space(6)
-                textFormat: Text.PlainText
-                text: root.paintTarget ? root.paintTarget + " selected" : "Nothing selected"
-                color: root.paintTarget ? root.fg : root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-              }
+              Repeater {
+                model: modeRow.choices
 
-              Button {
-                text: "All"
-                bordered: true
-                foreground: root.fg
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                tooltipText: root.rgbSubTabEffective === "keyboard" ? "Select every mapped key (K)" : "Select every region (a)"
-                onClicked: root.rgbSubTabEffective === "keyboard" ? root.selectAllKeys() : root.selectAllRegions()
-              }
+                Rectangle {
+                  id: modeTile
+                  required property var modelData
+                  required property int index
+                  readonly property bool current: root.hw.profile.current === modelData
+                  readonly property bool usable: root.available && root.hw.profile.writable
+                  width: modeRow.cell
+                  height: modeCol.implicitHeight + Style.space(14)
+                  radius: Math.max(Style.cornerRadius, Style.space(3))
+                  color: current ? Util.alpha(root.accent, 0.22) : (modeMouse.containsMouse && usable ? Style.hoverFillFor(root.fg, root.accent) : "transparent")
+                  border.width: current ? Math.max(2, Style.normalBorderWidth * 2) : Style.normalBorderWidth
+                  border.color: current ? root.accent : Util.alpha(root.fg, 0.18)
+                  opacity: usable ? 1.0 : 0.5
+                  Behavior on color { ColorAnimation { duration: 140 } }
 
-              Button {
-                text: "None"
-                bordered: true
-                foreground: root.fg
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                tooltipText: root.rgbSubTabEffective === "keyboard" ? "Clear the key selection (X)" : "Clear the selection (x)"
-                onClicked: {
-                  if (root.rgbSubTabEffective === "keyboard") {
-                    root.clearKeySelection()
-                    if (root.regionSelection.indexOf("power") !== -1) root.toggleRegionSelection("power")
-                  } else root.clearRegionSelection()
+                  Column {
+                    id: modeCol
+                    anchors.centerIn: parent
+                    width: parent.width - Style.space(8)
+                    spacing: Style.space(3)
+
+                    Text {
+                      width: parent.width
+                      horizontalAlignment: Text.AlignHCenter
+                      textFormat: Text.PlainText
+                      text: Model.profileGlyph(modeTile.modelData)
+                      color: modeTile.current ? root.accent : root.fg
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.title
+                    }
+
+                    Text {
+                      width: parent.width
+                      horizontalAlignment: Text.AlignHCenter
+                      textFormat: Text.PlainText
+                      text: Model.profileLabel(modeTile.modelData, root.hw.profile.gmodeForced)
+                      color: modeTile.current ? root.fg : root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.bold: modeTile.current
+                      elide: Text.ElideRight
+                    }
+                  }
+
+                  MouseArea {
+                    id: modeMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    enabled: modeTile.usable
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: if (root.service) root.service.setProfile(modeTile.modelData)
+                  }
                 }
               }
+            }
 
-              Button {
-                visible: root.rgbSubTabEffective === "keyboard"
-                iconText: "󰐥"
-                bordered: true
-                enabled: root.keySelection.length > 0
-                foreground: root.fg
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                tooltipText: "Turn the selected keys on or off (p)"
-                onClicked: root.toggleKeySelectionPower()
+            Text {
+              width: parent.width
+              wrapMode: Text.Wrap
+              visible: root.service ? root.service.profileWarning !== "" : false
+              text: "󰀦  " + (root.service ? root.service.profileWarning : "")
+              color: root.urgentColor
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+          }
+
+          Rectangle {
+            id: tabStrip
+            width: parent.width
+            height: tabRow.implicitHeight + Style.space(6)
+            visible: !root.settingsOpen
+            radius: Math.max(Style.cornerRadius, Style.space(4))
+            color: Style.normalFillFor(root.fg, root.accent)
+            border.color: Util.alpha(root.fg, 0.15)
+            border.width: Style.normalBorderWidth
+
+            Row {
+              id: tabRow
+              anchors.centerIn: parent
+              width: parent.width - Style.space(6)
+              spacing: Style.space(3)
+
+              Repeater {
+                model: root.tabs
+
+                Rectangle {
+                  id: tabTile
+                  required property var modelData
+                  readonly property bool current: root.tab === modelData.key
+                  width: (tabRow.width - tabRow.spacing * (root.tabs.length - 1)) / root.tabs.length
+                  height: tabLabel.implicitHeight + Style.space(12)
+                  radius: Math.max(Style.cornerRadius - 2, Style.space(3))
+                  color: current ? Util.alpha(root.fg, 0.14) : (tabMouse.containsMouse ? Util.alpha(root.fg, 0.06) : "transparent")
+                  Behavior on color { ColorAnimation { duration: 120 } }
+
+                  Text {
+                    id: tabLabel
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: tabTile.modelData.icon + "  " + tabTile.modelData.label
+                    color: tabTile.current ? root.fg : root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: tabTile.current
+                  }
+
+                  Rectangle {
+                    visible: tabTile.current
+                    anchors.bottom: parent.bottom
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Style.space(24)
+                    height: Math.max(2, Style.space(2))
+                    radius: height / 2
+                    color: root.accent
+                  }
+
+                  MouseArea {
+                    id: tabMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.setTab(tabTile.modelData.key)
+                  }
+                }
               }
             }
           }
 
           Column {
-            id: themePanel
+            id: fansTab
             width: parent.width
             spacing: Style.space(12)
-            visible: root.rgbSubTabEffective === "theme"
+            visible: root.tab === "fans" && !root.settingsOpen
 
-            Card {
-              edge: root.themeOn ? Util.alpha(root.accent, 0.45) : Util.alpha(root.fg, 0.15)
-
-              Item {
-                width: parent.width
-                implicitHeight: Math.max(themeHeadText.implicitHeight, themeSwitch.implicitHeight)
-
-                Text {
-                  id: themeHeadIcon
-                  anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
-                  textFormat: Text.PlainText
-                  text: "󰏘"
-                  color: root.themeOn ? root.accent : root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.display
-                }
-
-                Column {
-                  id: themeHeadText
-                  anchors.left: themeHeadIcon.right
-                  anchors.leftMargin: Style.space(10)
-                  anchors.right: themeSwitch.left
-                  anchors.rightMargin: Style.space(10)
-                  anchors.verticalCenter: parent.verticalCenter
-                  spacing: Style.space(2)
-
-                  Text {
-                    width: parent.width
-                    textFormat: Text.PlainText
-                    text: "Match " + root.themeDisplayName
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.title
-                    font.bold: true
-                    elide: Text.ElideRight
-                  }
-
-                  Text {
-                    width: parent.width
-                    textFormat: Text.PlainText
-                    text: !root.themePlan.ok
-                      ? "Reading the theme palette"
-                      : (root.themeOn
-                        ? (root.themePlan.style === "accent" ? "Every light follows the accent and updates with the theme" : "A diagonal blend across the keys and chassis, repainted on every theme change")
-                        : "Off. Your own colours are showing. Turn on to preview it on the hardware.")
-                    color: root.dim
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                    wrapMode: Text.Wrap
-                  }
-                }
-
-                ToggleSwitch {
-                  id: themeSwitch
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  checked: root.themeOn
-                  interactive: root.rgbConnected || root.kbdPresent
-                  foreground: root.fg
-                  accent: root.accent
-                  onToggled: if (root.service) root.service.toggleThemeSync()
-                }
-              }
-
-              Item {
-                width: parent.width
-                implicitHeight: Style.space(54)
-
-                ThemeEndChip {
-                  id: nearChip
-                  anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
-                  hex: root.themePlan.near
-                  name: root.themePlan.nearName
-                  caption: "FROM"
-                }
-
-                Canvas {
-                  id: ribbonCanvas
-                  anchors.left: nearChip.right
-                  anchors.right: swapButton.left
-                  anchors.leftMargin: Style.space(10)
-                  anchors.rightMargin: Style.space(10)
-                  anchors.verticalCenter: parent.verticalCenter
-                  height: Style.space(22)
-                  opacity: root.themeOn ? 1.0 : 0.55
-                  property var stops: root.themeRibbon
-                  onStopsChanged: requestPaint()
-                  onWidthChanged: requestPaint()
-                  Behavior on opacity { NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
-                  onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.reset()
-                    var list = ribbonCanvas.stops || []
-                    if (!list.length || width <= 0) return
-                    var r = height / 2
-                    var grad = ctx.createLinearGradient(0, 0, width, 0)
-                    for (var i = 0; i < list.length; i++) grad.addColorStop(list[i].position, list[i].color)
-                    ctx.beginPath()
-                    ctx.moveTo(r, 0)
-                    ctx.lineTo(width - r, 0)
-                    ctx.arc(width - r, r, r, -Math.PI / 2, Math.PI / 2, false)
-                    ctx.lineTo(r, height)
-                    ctx.arc(r, r, r, Math.PI / 2, Math.PI * 1.5, false)
-                    ctx.closePath()
-                    ctx.fillStyle = grad
-                    ctx.fill()
-                    ctx.lineWidth = 1
-                    ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12)
-                    ctx.stroke()
-                  }
-                }
-
-                ThemeEndChip {
-                  id: farChip
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  hex: root.themePlan.far
-                  name: root.themePlan.farName
-                  caption: "TO"
-                  alignRight: true
-                }
-
-                Button {
-                  id: swapButton
-                  anchors.right: farChip.left
-                  anchors.rightMargin: Style.space(10)
-                  anchors.verticalCenter: parent.verticalCenter
-                  iconText: "󰓡"
-                  bordered: true
-                  enabled: root.themePlan.style !== "accent"
-                  foreground: root.fg
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
-                  tooltipText: "Swap the two ends (w)"
-                  onClicked: if (root.service) root.service.toggleThemeSwap()
-                }
-              }
-            }
-
-            KeyboardMap {
+            Row {
+              id: fanCards
               width: parent.width
-              visible: root.kbdPresent
-              present: root.kbdPresent
-              keyColors: root.themePlan.keys
-              keyOn: root.service ? root.service.keyOn : ({})
-              selection: []
-              opacity: root.themeOn ? 1.0 : 0.6
-              fg: root.fg
-              dim: root.dim
-              accent: root.accent
-              fontFamily: root.fontFamily
-              powerColor: root.themeRegionHex("power") !== "" && root.isRegionOn("power") ? Model.hexPreview(root.themeRegionHex("power")) : root.dim
-              powerLit: root.themeRegionHex("power") !== "" && root.isRegionOn("power")
-              powerSelected: false
-              onPowerClicked: if (root.service) root.service.toggleRegionOn(["power"])
-              Behavior on opacity { NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
+              spacing: Style.space(8)
+              readonly property real cardWidth: (width - spacing) / 2
+
+              FanCard {
+                width: fanCards.cardWidth
+                fan: root.cpuFan
+                temp: root.cpuTemp
+                stale: root.stale
+                hotTemp: root.hotTemp
+                fg: root.fg
+                dim: root.dim
+                accent: root.accent
+                alertColor: root.urgentColor
+                fontFamily: root.fontFamily
+              }
+
+              FanCard {
+                width: fanCards.cardWidth
+                fan: root.gpuFan
+                temp: root.gpuTemp
+                stale: root.stale
+                hotTemp: root.hotTemp
+                fg: root.fg
+                dim: root.dim
+                accent: root.accent
+                alertColor: root.urgentColor
+                fontFamily: root.fontFamily
+              }
             }
 
             Card {
               CardTitle {
-                title: "CHASSIS"
-                detail: root.allChassisOff ? "all off" : "click a light to turn it on or off"
+                title: "BOOST CURVE"
+                detail: root.hw.curve.active ? "Running" : "Idle"
+                detailColor: root.hw.curve.active ? root.accent : root.dim
 
-                Button {
-                  text: root.allChassisOff ? "All on" : "All off"
-                  iconText: "󰐥"
-                  bordered: true
-                  enabled: root.rgbConnected
+                ButtonGroup {
+                  options: [{ value: "cpu", label: "CPU fan" }, { value: "gpu", label: "GPU fan" }]
+                  value: root.curveFan
                   foreground: root.fg
+                  accent: root.accent
                   fontFamily: root.fontFamily
                   fontSize: Style.font.caption
-                  tooltipText: "Turn every chassis light on or off (a)"
-                  onClicked: if (root.service) root.service.setAllRegionsOn(root.allChassisOff)
+                  focusable: false
+                  onChanged: function(v) { root.curveFan = v; root.pointCursor = 0 }
                 }
               }
 
-              Row {
-                id: chassisRow
+              CurveEditor {
                 width: parent.width
-                spacing: Style.space(8)
-                readonly property real cell: (width - spacing * 3) / 4
-
-                Repeater {
-                  model: root.themeChassisOrder
-
-                  ThemeChassisChip {
-                    required property var modelData
-                    required property int index
-                    width: chassisRow.cell
-                    regionId: modelData.id
-                    label: modelData.label
-                    icon: modelData.icon
-                    shortcut: String(index + 1)
-                    hex: root.themeRegionHex(modelData.id)
-                    lightOn: root.isRegionOn(modelData.id)
-                    battery: modelData.id === "power" && root.batteryOnPower
-                    enabled: root.rgbConnected
-                    onClicked: if (root.service) root.service.toggleRegionOn([modelData.id])
-                  }
-                }
+                points: root.curvePoints
+                floorPercent: root.curveFloor
+                currentTemp: root.curveTemp
+                selectedIndex: root.pointCursor
+                editable: root.available
+                fg: root.fg
+                dim: root.dim
+                accent: root.accent
+                alertColor: root.urgentColor
+                fontFamily: root.fontFamily
+                onEdited: function(next) { root.setCurvePoints(next) }
+                onPointPicked: function(index) { root.pointCursor = index }
               }
-            }
-
-            Card {
-              opacity: root.themeOn ? 1.0 : 0.45
-              Behavior on opacity { NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
 
               Item {
                 width: parent.width
-                implicitHeight: Math.max(styleGroup.implicitHeight, axisGroup.implicitHeight)
+                implicitHeight: Math.max(presetFlow.implicitHeight, curveActions.implicitHeight)
 
-                ButtonGroup {
-                  id: styleGroup
+                Flow {
+                  id: presetFlow
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
-                  options: [{ value: "gradient", label: "󰸌  Gradient" }, { value: "accent", label: "󰝤  Accent" }]
-                  value: root.service ? root.service.themeStyle : "gradient"
-                  foreground: root.fg
-                  accent: root.accent
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
-                  focusable: false
-                  onChanged: function(v) { if (root.service) root.service.setThemeStyle(v) }
+                  width: parent.width - curveActions.implicitWidth - Style.space(12)
+                  spacing: Style.space(4)
+
+                  Repeater {
+                    model: Model.presetNames()
+
+                    Button {
+                      required property var modelData
+                      required property int index
+                      text: modelData.charAt(0).toUpperCase() + modelData.slice(1)
+                      tooltipText: "Preset " + (index + 1)
+                      bordered: true
+                      foreground: root.fg
+                      fontFamily: root.fontFamily
+                      fontSize: Style.font.caption
+                      onClicked: root.applyPreset(modelData)
+                    }
+                  }
                 }
 
-                ButtonGroup {
-                  id: axisGroup
+                Row {
+                  id: curveActions
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
-                  enabled: !root.service || root.service.themeStyle !== "accent"
-                  opacity: enabled ? 1.0 : 0.45
-                  options: [
-                    { value: "tl-br", label: "↘" },
-                    { value: "tr-bl", label: "↙" },
-                    { value: "lr", label: "→" },
-                    { value: "tb", label: "↓" }
-                  ]
-                  value: root.service ? root.service.themeAxis : "tl-br"
-                  foreground: root.fg
-                  accent: root.accent
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.bodySmall
-                  focusable: false
-                  onChanged: function(v) { if (root.service) root.service.setThemeAxis(v) }
+                  spacing: Style.space(4)
+
+                  Button {
+                    iconText: "󰑓"
+                    bordered: true
+                    foreground: root.fg
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    tooltipText: "Back to the default points (0)"
+                    onClicked: if (root.service) root.service.resetCurve()
+                  }
+
+                  Button {
+                    iconText: "󰓛"
+                    text: "Stop"
+                    bordered: true
+                    enabled: root.available && root.hw.curve.active
+                    foreground: root.fg
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    tooltipText: "Hand the fans back to firmware (x)"
+                    onClicked: if (root.service) root.service.stopCurve()
+                  }
+
+                  Button {
+                    iconText: "󰐊"
+                    text: root.hw.curve.active ? "Update" : "Apply"
+                    bordered: true
+                    selected: true
+                    enabled: root.available
+                    foreground: root.fg
+                    accent: root.accent
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    tooltipText: "Send the curve to the daemon (a)"
+                    onClicked: if (root.service) root.service.applyCurve()
+                  }
                 }
               }
 
               Row {
                 width: parent.width
                 spacing: Style.space(16)
-                readonly property real half: (width - spacing) / 2
 
                 ValueSlider {
-                  width: parent.half
-                  label: "Intensity"
-                  valueText: ThemeFx.intensityLabel(root.service ? root.service.themeIntensity : 0)
-                  note: "Saturation pushed through the key diffusers"
-                  value: root.service ? root.service.themeIntensity : 0
-                  from: -10
-                  to: 10
+                  width: (parent.width - parent.spacing) / 2
+                  label: "Hysteresis"
+                  valueText: (root.service ? root.service.curveHysteresis : 3) + " °C"
+                  value: root.service ? root.service.curveHysteresis : 3
+                  from: 0
+                  to: 15
                   stepSize: 1
-                  editable: !!root.service
+                  note: "Drop needed before the boost steps down"
                   fg: root.fg
                   dim: root.dim
                   fontFamily: root.fontFamily
-                  onMoved: function(next) { if (root.service) root.service.setThemeIntensity(next) }
+                  onMoved: function(next) { if (root.service) root.service.setCurveHysteresis(next) }
                 }
 
                 ValueSlider {
-                  width: parent.half
-                  label: "Key brightness"
-                  valueText: (root.service ? root.service.themeKbdBrightness : 100) + "%"
-                  note: "Dims the keyboard only. The chassis uses Brightness above."
-                  value: root.service ? root.service.themeKbdBrightness : 100
-                  from: 0
-                  to: 100
-                  stepSize: 5
-                  editable: !!root.service
+                  width: (parent.width - parent.spacing) / 2
+                  label: "Interval"
+                  valueText: (root.service ? root.service.curveInterval : 2) + " s"
+                  value: root.service ? root.service.curveInterval : 2
+                  from: 1
+                  to: 30
+                  stepSize: 1
+                  note: "How often the daemon re-reads temperatures"
                   fg: root.fg
                   dim: root.dim
                   fontFamily: root.fontFamily
-                  onMoved: function(next) { if (root.service) root.service.setThemeKbdBrightness(next) }
+                  onMoved: function(next) { if (root.service) root.service.setCurveInterval(next) }
+                }
+              }
+            }
+          }
+
+          Column {
+            id: rgbTab
+            width: parent.width
+            spacing: Style.space(12)
+            visible: root.tab === "rgb" && !root.settingsOpen
+
+            Text {
+              width: parent.width
+              wrapMode: Text.Wrap
+              visible: !root.rgbConnected
+              text: "󰀦  " + (root.rgbError !== "" ? root.rgbError : "Waiting for the lighting controller")
+              color: root.urgentColor
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Card {
+              Row {
+                id: switchRow
+                width: parent.width
+                spacing: Style.space(10)
+                readonly property real cell: (width - spacing * 2) / 3
+
+                SwitchTile {
+                  width: switchRow.cell
+                  icon: "󱄄"
+                  title: "Lighting"
+                  detail: root.rgb.device.ready ? (root.service && root.service.lightsOn ? "On" : "Off") : "No controller"
+                  checked: root.service ? root.service.lightsOn : false
+                  enabled: root.rgbConnected
+                  onToggled: if (root.service) root.service.toggleLights()
+                }
+
+                SwitchTile {
+                  width: switchRow.cell
+                  icon: "󰏘"
+                  title: "Match theme"
+                  detail: !root.themeOn ? "Off" : (root.themePlan.style === "accent" ? "Accent" : ThemeFx.prettyName(root.themePlan.nearName) + " → " + ThemeFx.prettyName(root.themePlan.farName))
+                  checked: root.service ? root.service.themeSync : false
+                  enabled: root.rgbConnected
+                  onToggled: if (root.service) root.service.toggleThemeSync()
+                }
+
+                SwitchTile {
+                  width: switchRow.cell
+                  icon: "󰂄"
+                  title: "Battery on ⏻"
+                  detail: root.service && root.service.batterySync ? root.batteryLine : "Power button is yours"
+                  checked: root.service ? root.service.batterySync : true
+                  enabled: root.rgbConnected
+                  onToggled: if (root.service) root.service.toggleBatterySync()
                 }
               }
 
-              Column {
+              ValueSlider {
                 width: parent.width
-                spacing: Style.space(6)
-                visible: !root.service || root.service.themeStyle !== "accent"
+                label: "Brightness"
+                valueText: (root.service ? root.service.brightness : 100) + "%"
+                value: root.service ? root.service.brightness : 100
+                from: 0
+                to: 100
+                stepSize: 5
+                editable: root.rgbConnected
+                fg: root.fg
+                dim: root.dim
+                fontFamily: root.fontFamily
+                onMoved: function(next) { if (root.service) root.service.setBrightness(next) }
+              }
+            }
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(surfaceGroup.implicitHeight, surfaceActions.implicitHeight)
+
+              ButtonGroup {
+                id: surfaceGroup
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                options: root.kbdPresent
+                  ? [{ value: "keyboard", label: "󰌌  Keyboard" }, { value: "chassis", label: "󰢚  Chassis" }, { value: "theme", label: "󰏘  Theme" }]
+                  : [{ value: "chassis", label: "󰢚  Chassis" }, { value: "theme", label: "󰏘  Theme" }]
+                value: root.rgbSubTabEffective
+                foreground: root.fg
+                accent: root.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                focusable: false
+                onChanged: function(v) { root.setRgbSubTab(v) }
+              }
+
+              Row {
+                id: surfaceActions
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(4)
+                visible: root.rgbSubTabEffective !== "theme"
 
                 Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  rightPadding: Style.space(6)
                   textFormat: Text.PlainText
-                  text: "FAR END"
-                  color: root.dim
+                  text: root.paintTarget ? root.paintTarget + " selected" : "Nothing selected"
+                  color: root.paintTarget ? root.fg : root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
-                  font.bold: true
-                  font.letterSpacing: 1.4
                 }
 
-                Flow {
-                  width: parent.width
-                  spacing: Style.space(6)
+                Button {
+                  text: "All"
+                  bordered: true
+                  foreground: root.fg
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  tooltipText: root.rgbSubTabEffective === "keyboard" ? "Select every mapped key (K)" : "Select every region (a)"
+                  onClicked: root.rgbSubTabEffective === "keyboard" ? root.selectAllKeys() : root.selectAllRegions()
+                }
 
-                  FarChip {
-                    label: "Auto"
-                    hex: ""
-                    selected: !root.service || root.service.themeFar === ""
-                    onClicked: if (root.service) root.service.setThemeFar("")
+                Button {
+                  text: "None"
+                  bordered: true
+                  foreground: root.fg
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  tooltipText: root.rgbSubTabEffective === "keyboard" ? "Clear the key selection (X)" : "Clear the selection (x)"
+                  onClicked: {
+                    if (root.rgbSubTabEffective === "keyboard") {
+                      root.clearKeySelection()
+                      if (root.regionSelection.indexOf("power") !== -1) root.toggleRegionSelection("power")
+                    } else root.clearRegionSelection()
+                  }
+                }
+
+                Button {
+                  visible: root.rgbSubTabEffective === "keyboard"
+                  iconText: "󰐥"
+                  bordered: true
+                  enabled: root.keySelection.length > 0
+                  foreground: root.fg
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  tooltipText: "Turn the selected keys on or off (p)"
+                  onClicked: root.toggleKeySelectionPower()
+                }
+              }
+            }
+
+            Column {
+              id: themePanel
+              width: parent.width
+              spacing: Style.space(8)
+              visible: root.rgbSubTabEffective === "theme"
+
+              Card {
+                edge: root.themeOn ? Util.alpha(root.accent, 0.45) : Util.alpha(root.fg, 0.15)
+
+                Item {
+                  width: parent.width
+                  implicitHeight: Math.max(themeHeadText.implicitHeight, themeSwitch.implicitHeight)
+
+                  Text {
+                    id: themeHeadIcon
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: "󰏘"
+                    color: root.themeOn ? root.accent : root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.display
                   }
 
-                  Repeater {
-                    model: root.service ? root.service.themeFarChoices : []
+                  Column {
+                    id: themeHeadText
+                    anchors.left: themeHeadIcon.right
+                    anchors.leftMargin: Style.space(10)
+                    anchors.right: styleGroup.left
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Style.space(2)
+
+                    Text {
+                      width: parent.width
+                      textFormat: Text.PlainText
+                      text: "Match " + root.themeDisplayName
+                      color: root.themeOn ? root.fg : root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.title
+                      font.bold: true
+                      elide: Text.ElideRight
+                    }
+                  }
+
+                  ButtonGroup {
+                    id: styleGroup
+                    anchors.right: themeSwitch.left
+                    anchors.rightMargin: Style.space(12)
+                    anchors.verticalCenter: parent.verticalCenter
+                    options: [{ value: "gradient", label: "󰸌  Gradient" }, { value: "accent", label: "󰝤  Accent" }]
+                    value: root.service ? root.service.themeStyle : "gradient"
+                    foreground: root.fg
+                    accent: root.accent
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    focusable: false
+                    onChanged: function(v) { if (root.service) root.service.setThemeStyle(v) }
+                  }
+
+                  ToggleSwitch {
+                    id: themeSwitch
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    checked: root.themeOn
+                    interactive: root.rgbConnected || root.kbdPresent
+                    foreground: root.fg
+                    accent: root.accent
+                    onToggled: if (root.service) root.service.toggleThemeSync()
+                  }
+                }
+
+                Item {
+                  width: parent.width
+                  implicitHeight: Style.space(28)
+
+                  ThemeEndChip {
+                    id: nearChip
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    hex: root.themePlan.near
+                    name: root.themePlan.nearName
+                    caption: "FROM"
+                  }
+
+                  Canvas {
+                    id: ribbonCanvas
+                    anchors.left: nearChip.right
+                    anchors.right: swapButton.left
+                    anchors.leftMargin: Style.space(10)
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: Style.space(14)
+                    opacity: root.themeOn ? 1.0 : 0.55
+                    property var stops: root.themeRibbon
+                    onStopsChanged: requestPaint()
+                    onWidthChanged: requestPaint()
+                    Behavior on opacity { NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
+                    onPaint: {
+                      var ctx = getContext("2d")
+                      ctx.reset()
+                      var list = ribbonCanvas.stops || []
+                      if (!list.length || width <= 0) return
+                      var r = height / 2
+                      var grad = ctx.createLinearGradient(0, 0, width, 0)
+                      for (var i = 0; i < list.length; i++) grad.addColorStop(list[i].position, list[i].color)
+                      ctx.beginPath()
+                      ctx.moveTo(r, 0)
+                      ctx.lineTo(width - r, 0)
+                      ctx.arc(width - r, r, r, -Math.PI / 2, Math.PI / 2, false)
+                      ctx.lineTo(r, height)
+                      ctx.arc(r, r, r, Math.PI / 2, Math.PI * 1.5, false)
+                      ctx.closePath()
+                      ctx.fillStyle = grad
+                      ctx.fill()
+                      ctx.lineWidth = 1
+                      ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12)
+                      ctx.stroke()
+                    }
+                  }
+
+                  ThemeEndChip {
+                    id: farChip
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    hex: root.themePlan.far
+                    name: root.themePlan.farName
+                    caption: "TO"
+                    alignRight: true
+                  }
+
+                  Button {
+                    id: swapButton
+                    anchors.right: farChip.left
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconText: "󰓡"
+                    bordered: true
+                    enabled: root.themePlan.style !== "accent"
+                    foreground: root.fg
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    tooltipText: "Swap the two ends (w)"
+                    onClicked: if (root.service) root.service.toggleThemeSwap()
+                  }
+                }
+
+                Item {
+                  width: parent.width
+                  implicitHeight: Math.max(farFlow.implicitHeight, axisGroup.implicitHeight)
+                  visible: !root.service || root.service.themeStyle !== "accent"
+                  opacity: root.themeOn ? 1.0 : 0.55
+
+                  ButtonGroup {
+                    id: axisGroup
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    enabled: !root.service || root.service.themeStyle !== "accent"
+                    opacity: enabled ? 1.0 : 0.45
+                    options: [
+                      { value: "tl-br", label: "↘" },
+                      { value: "tr-bl", label: "↙" },
+                      { value: "lr", label: "→" },
+                      { value: "tb", label: "↓" }
+                    ]
+                    value: root.service ? root.service.themeAxis : "tl-br"
+                    foreground: root.fg
+                    accent: root.accent
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    focusable: false
+                    onChanged: function(v) { if (root.service) root.service.setThemeAxis(v) }
+                  }
+
+                  Flow {
+                    id: farFlow
+                    anchors.left: parent.left
+                    anchors.right: axisGroup.left
+                    anchors.rightMargin: Style.space(12)
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Style.space(4)
+
+                    Text {
+                      height: autoFar.height
+                      verticalAlignment: Text.AlignVCenter
+                      textFormat: Text.PlainText
+                      text: "Far end"
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                      rightPadding: Style.space(4)
+                    }
 
                     FarChip {
-                      required property var modelData
-                      label: modelData.label
-                      hex: modelData.hex
-                      selected: root.service && root.service.themeFar === modelData.id
-                      onClicked: if (root.service) root.service.setThemeFar(modelData.id)
+                      id: autoFar
+                      label: "Auto"
+                      hex: ""
+                      selected: !root.service || root.service.themeFar === ""
+                      onClicked: if (root.service) root.service.setThemeFar("")
+                    }
+
+                    Repeater {
+                      model: root.service ? root.service.themeFarChoices : []
+
+                      FarChip {
+                        required property var modelData
+                        label: modelData.label
+                        hex: modelData.hex
+                        compact: true
+                        selected: root.service && root.service.themeFar === modelData.id
+                        onClicked: if (root.service) root.service.setThemeFar(modelData.id)
+                      }
                     }
                   }
                 }
               }
+
+              KeyboardMap {
+                width: parent.width
+                visible: root.kbdPresent
+                present: root.kbdPresent
+                keyColors: root.themePlan.keys
+                keyHeight: Style.space(19)
+                keyOn: root.service ? root.service.keyOn : ({})
+                selection: []
+                opacity: root.themeOn ? 1.0 : 0.6
+                fg: root.fg
+                dim: root.dim
+                accent: root.accent
+                fontFamily: root.fontFamily
+                powerColor: root.themeRegionHex("power") !== "" && root.isRegionOn("power") ? Model.hexPreview(root.themeRegionHex("power")) : root.dim
+                powerLit: root.themeRegionHex("power") !== "" && root.isRegionOn("power")
+                powerSelected: false
+                onPowerClicked: if (root.service) root.service.toggleRegionOn(["power"])
+                Behavior on opacity { NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
+              }
+
+              Card {
+                Column {
+                  width: parent.width
+                  spacing: Style.space(10)
+                  opacity: root.themeOn ? 1.0 : 0.45
+                  Behavior on opacity { NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
+
+                  Row {
+                    width: parent.width
+                    spacing: Style.space(16)
+                    readonly property real half: (width - spacing) / 2
+
+                    ValueSlider {
+                      width: parent.half
+                      label: "Intensity"
+                      valueText: ThemeFx.intensityLabel(root.service ? root.service.themeIntensity : 0)
+                      value: root.service ? root.service.themeIntensity : 0
+                      from: -10
+                      to: 10
+                      stepSize: 1
+                      editable: !!root.service
+                      fg: root.fg
+                      dim: root.dim
+                      fontFamily: root.fontFamily
+                      onMoved: function(next) { if (root.service) root.service.setThemeIntensity(next) }
+                    }
+
+                    ValueSlider {
+                      width: parent.half
+                      label: "Key brightness"
+                      valueText: (root.service ? root.service.themeKbdBrightness : 100) + "%"
+                      value: root.service ? root.service.themeKbdBrightness : 100
+                      from: 0
+                      to: 100
+                      stepSize: 5
+                      editable: !!root.service
+                      fg: root.fg
+                      dim: root.dim
+                      fontFamily: root.fontFamily
+                      onMoved: function(next) { if (root.service) root.service.setThemeKbdBrightness(next) }
+                    }
+                  }
+                }
+
+                Item {
+                  width: parent.width
+                  implicitHeight: Math.max(chassisLabel.implicitHeight, allChassisButton.implicitHeight, chassisRow.implicitHeight)
+
+                  Text {
+                    id: chassisLabel
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: "Chassis"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+
+                  Row {
+                    id: chassisRow
+                    anchors.left: chassisLabel.right
+                    anchors.leftMargin: Style.space(10)
+                    anchors.right: allChassisButton.left
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Style.space(6)
+                    readonly property real cell: (width - spacing * 3) / 4
+
+                    Repeater {
+                      model: root.themeChassisOrder
+
+                      ThemeChassisChip {
+                        required property var modelData
+                        required property int index
+                        width: chassisRow.cell
+                        regionId: modelData.id
+                        label: modelData.label
+                        fullName: modelData.name
+                        shortcut: String(index + 1)
+                        hex: root.themeRegionHex(modelData.id)
+                        lightOn: root.isRegionOn(modelData.id)
+                        battery: modelData.id === "power" && root.batteryOnPower
+                        enabled: root.rgbConnected
+                        onClicked: if (root.service) root.service.toggleRegionOn([modelData.id])
+                      }
+                    }
+                  }
+
+                  Button {
+                    id: allChassisButton
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.allChassisOff ? "All on" : "All off"
+                    iconText: "󰐥"
+                    bordered: true
+                    enabled: root.rgbConnected
+                    foreground: root.fg
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    tooltipText: "Turn every chassis light on or off (a)"
+                    onClicked: if (root.service) root.service.setAllRegionsOn(root.allChassisOff)
+                  }
+                }
+              }
             }
-          }
 
-          KeyboardMap {
-            width: parent.width
-            visible: root.kbdPresent && root.rgbSubTabEffective === "keyboard"
-            present: root.kbdPresent
-            keyColors: root.activeKeyColors
-            keyOn: root.service ? root.service.keyOn : ({})
-            selection: root.keySelection
-            fg: root.fg
-            dim: root.dim
-            accent: root.accent
-            fontFamily: root.fontFamily
-            powerColor: root.powerButtonColor
-            powerLit: root.powerButtonLit
-            powerSelected: root.regionSelection.indexOf("power") !== -1
-            onToggleRequested: function(keyId) { root.toggleKeySelection(keyId) }
-            onDragSelectRequested: function(keyIds) { root.addKeysToSelection(keyIds) }
-            onPowerClicked: root.pickPowerKey()
-          }
-
-          Text {
-            width: parent.width
-            wrapMode: Text.Wrap
-            visible: root.kbdPresent && root.rgbSubTabEffective === "keyboard"
-            text: "Click or drag across keys to select them. Click ⏻ for the power button" + (root.service && root.service.batterySync ? " once Battery on ⏻ is off." : ".") + " Faded keys have no confirmed LED yet."
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
-
-          RegionMap {
-            width: parent.width
-            visible: root.rgbSubTabEffective === "chassis"
-            regions: root.regions
-            swatches: root.regionSwatchMap
-            poweredMap: root.regionPoweredMap
-            selection: root.regionSelection
-            cursorIndex: root.regionCursor
-            fg: root.fg
-            dim: root.dim
-            accent: root.accent
-            fontFamily: root.fontFamily
-            onPicked: function(rowIndex) { root.regionCursor = rowIndex }
-            onToggleRequested: function(regionId) {
-              if (regionId === "power" && root.service && root.service.batterySync) { root.pickPowerKey(); return }
-              root.toggleRegionSelection(regionId)
-            }
-            onIdentifyRequested: function(regionId) { if (root.service) root.service.identifyRegion(regionId) }
-            onPowerRequested: function(regionId) { root.setRegionPower([regionId], !root.isRegionOn(regionId)) }
-          }
-
-          ColorPicker {
-            id: colorPicker
-            width: parent.width
-            visible: root.rgbSubTabEffective !== "theme"
-            hex: root.pickedHex
-            swatches: root.service ? root.service.themeSwatches : []
-            themeEnabled: root.rgbConnected
-            canApply: root.rgbConnected && root.paintTarget !== ""
-            targetText: root.paintTarget
-            fg: root.fg
-            dim: root.dim
-            accent: root.accent
-            fontFamily: root.fontFamily
-            onPicked: function(nextHex) { root.pickedHex = nextHex }
-            onApplyRequested: root.applyColorField()
-            onThemeColorRequested: if (root.service) root.service.applyThemeColor()
-            onFieldEscaped: root.refocusPanel()
-          }
-        }
-
-        Column {
-          id: powerTab
-          width: parent.width
-          spacing: Style.space(12)
-          visible: root.tab === "power" && !root.settingsOpen
-
-          Grid {
-            id: statGrid
-            width: parent.width
-            columns: 4
-            columnSpacing: Style.space(8)
-            rowSpacing: Style.space(8)
-            readonly property real cell: (width - columnSpacing * (columns - 1)) / columns
-
-            StatTile {
-              width: statGrid.cell
-              icon: "󰻠"
-              label: "CPU"
-              value: Model.formatTemp(root.cpuTemp, true)
-              sub: Model.formatClock(Model.cpuClock(root.hw))
-              alert: root.cpuTemp !== null && root.cpuTemp >= root.hotTemp
-              muted: root.stale
-            }
-            StatTile {
-              width: statGrid.cell
-              icon: "󰢮"
-              label: "GPU"
-              value: Model.formatTemp(root.gpuTemp, true)
-              sub: root.hw.gpu.available ? Model.formatWatts(root.hw.gpu.draw, 1) + " draw" : (root.hw.gpu.asleep ? "asleep, saving power" : "no reading")
-              alert: root.gpuTemp !== null && root.gpuTemp >= root.hotTemp
-              muted: root.stale
-            }
-            StatTile {
-              width: statGrid.cell
-              icon: "󱐋"
-              label: "GPU limit"
-              value: Model.formatWatts(root.hw.gpu.limit)
-              sub: root.hw.gpu.available ? "default " + Model.formatWatts(root.hw.gpu.defaultLimit) : Model.PL_LOCKED_NOTE
-              muted: true
-            }
-            StatTile {
-              width: statGrid.cell
-              icon: "󰈐"
-              label: "Fans"
-              value: Model.maxRpm(root.hw) > 0 ? Model.maxRpm(root.hw) + " rpm" : "Stopped"
-              sub: "CPU " + (root.cpuFan ? root.cpuFan.percent : 0) + "% · GPU " + (root.gpuFan ? root.gpuFan.percent : 0) + "%"
-              muted: root.stale
-            }
-          }
-
-          Card {
-            CardTitle {
-              title: "CPU POWER LIMITS"
-              detail: root.hw.power.available ? "RAPL" : "Unavailable"
+            KeyboardMap {
+              width: parent.width
+              visible: root.kbdPresent && root.rgbSubTabEffective === "keyboard"
+              present: root.kbdPresent
+              keyColors: root.activeKeyColors
+              keyOn: root.service ? root.service.keyOn : ({})
+              selection: root.keySelection
+              fg: root.fg
+              dim: root.dim
+              accent: root.accent
+              fontFamily: root.fontFamily
+              powerColor: root.powerButtonColor
+              powerLit: root.powerButtonLit
+              powerSelected: root.regionSelection.indexOf("power") !== -1
+              onToggleRequested: function(keyId) { root.toggleKeySelection(keyId) }
+              onDragSelectRequested: function(keyIds) { root.addKeysToSelection(keyIds) }
+              onPowerClicked: root.pickPowerKey()
             }
 
             Text {
               width: parent.width
               wrapMode: Text.Wrap
-              visible: !root.hw.power.available
-              text: "The RAPL interface is not readable on this machine"
+              visible: root.kbdPresent && root.rgbSubTabEffective === "keyboard"
+              text: "Click or drag across keys to select them. Click ⏻ for the power button" + (root.service && root.service.batterySync ? " once Battery on ⏻ is off." : ".") + " Faded keys have no confirmed LED yet."
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
             }
 
-            Repeater {
-              model: root.hw.power.available ? root.constraints : []
+            RegionMap {
+              width: parent.width
+              visible: root.rgbSubTabEffective === "chassis"
+              regions: root.regions
+              swatches: root.regionSwatchMap
+              poweredMap: root.regionPoweredMap
+              selection: root.regionSelection
+              cursorIndex: root.regionCursor
+              fg: root.fg
+              dim: root.dim
+              accent: root.accent
+              fontFamily: root.fontFamily
+              onPicked: function(rowIndex) { root.regionCursor = rowIndex }
+              onToggleRequested: function(regionId) {
+                if (regionId === "power" && root.service && root.service.batterySync) { root.pickPowerKey(); return }
+                root.toggleRegionSelection(regionId)
+              }
+              onIdentifyRequested: function(regionId) { if (root.service) root.service.identifyRegion(regionId) }
+              onPowerRequested: function(regionId) { root.setRegionPower([regionId], !root.isRegionOn(regionId)) }
+            }
 
-              ValueSlider {
-                required property var modelData
-                required property int index
+            ColorPicker {
+              id: colorPicker
+              width: parent.width
+              visible: root.rgbSubTabEffective !== "theme"
+              hex: root.pickedHex
+              swatches: root.service ? root.service.themeSwatches : []
+              themeEnabled: root.rgbConnected
+              canApply: root.rgbConnected && root.paintTarget !== ""
+              targetText: root.paintTarget
+              fg: root.fg
+              dim: root.dim
+              accent: root.accent
+              fontFamily: root.fontFamily
+              onPicked: function(nextHex) { root.pickedHex = nextHex }
+              onApplyRequested: root.applyColorField()
+              onThemeColorRequested: if (root.service) root.service.applyThemeColor()
+              onFieldEscaped: root.refocusPanel()
+            }
+          }
+
+          Column {
+            id: powerTab
+            width: parent.width
+            spacing: Style.space(12)
+            visible: root.tab === "power" && !root.settingsOpen
+
+            Grid {
+              id: statGrid
+              width: parent.width
+              columns: 4
+              columnSpacing: Style.space(8)
+              rowSpacing: Style.space(8)
+              readonly property real cell: (width - columnSpacing * (columns - 1)) / columns
+
+              StatTile {
+                width: statGrid.cell
+                icon: "󰻠"
+                label: "CPU"
+                value: Model.formatTemp(root.cpuTemp, true)
+                sub: Model.formatClock(Model.cpuClock(root.hw))
+                alert: root.cpuTemp !== null && root.cpuTemp >= root.hotTemp
+                muted: root.stale
+              }
+              StatTile {
+                width: statGrid.cell
+                icon: "󰢮"
+                label: "GPU"
+                value: Model.formatTemp(root.gpuTemp, true)
+                sub: root.hw.gpu.available ? Model.formatWatts(root.hw.gpu.draw, 1) + " draw" : (root.hw.gpu.asleep ? "asleep, saving power" : "no reading")
+                alert: root.gpuTemp !== null && root.gpuTemp >= root.hotTemp
+                muted: root.stale
+              }
+              StatTile {
+                width: statGrid.cell
+                icon: "󱐋"
+                label: "GPU limit"
+                value: Model.formatWatts(root.hw.gpu.limit)
+                sub: root.hw.gpu.available ? "default " + Model.formatWatts(root.hw.gpu.defaultLimit) : Model.PL_LOCKED_NOTE
+                muted: true
+              }
+              StatTile {
+                width: statGrid.cell
+                icon: "󰈐"
+                label: "Fans"
+                value: Model.maxRpm(root.hw) > 0 ? Model.maxRpm(root.hw) + " rpm" : "Stopped"
+                sub: "CPU " + (root.cpuFan ? root.cpuFan.percent : 0) + "% · GPU " + (root.gpuFan ? root.gpuFan.percent : 0) + "%"
+                muted: root.stale
+              }
+            }
+
+            Card {
+              CardTitle {
+                title: "CPU POWER LIMITS"
+                detail: root.hw.power.available ? "RAPL" : "Unavailable"
+              }
+
+              Text {
                 width: parent.width
-                label: modelData.label
-                valueText: Model.formatWatts(modelData.watts)
-                value: modelData.watts
-                from: 5
-                to: 250
-                stepSize: 5
-                editable: Model.powerLimitWritable(modelData)
-                focused: root.powerCursor === index
-                note: Model.powerLimitNote(modelData)
-                fg: root.fg
-                dim: root.dim
-                fontFamily: root.fontFamily
-                onMoved: function(next) {
-                  if (root.service && Model.powerLimitWritable(modelData)) root.service.setPowerLimit(modelData.index + 1, next)
+                wrapMode: Text.Wrap
+                visible: !root.hw.power.available
+                text: "The RAPL interface is not readable on this machine"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Repeater {
+                model: root.hw.power.available ? root.constraints : []
+
+                ValueSlider {
+                  required property var modelData
+                  required property int index
+                  width: parent.width
+                  label: modelData.label
+                  valueText: Model.formatWatts(modelData.watts)
+                  value: modelData.watts
+                  from: 5
+                  to: 250
+                  stepSize: 5
+                  editable: Model.powerLimitWritable(modelData)
+                  focused: root.powerCursor === index
+                  note: Model.powerLimitNote(modelData)
+                  fg: root.fg
+                  dim: root.dim
+                  fontFamily: root.fontFamily
+                  onMoved: function(next) {
+                    if (root.service && Model.powerLimitWritable(modelData)) root.service.setPowerLimit(modelData.index + 1, next)
+                  }
                 }
+              }
+            }
+
+            Card {
+              edge: root.powerCursor >= root.constraints.length ? root.accent : Util.alpha(root.fg, 0.15)
+
+              SwitchTile {
+                width: parent.width
+                icon: "󰓅"
+                title: "Intel turbo"
+                detail: root.hw.turbo.available ? "Boost above base clock. Off runs cooler and quieter." : "no_turbo is not readable on this machine"
+                checked: root.hw.turbo.enabled
+                enabled: root.hw.turbo.available && root.available
+                onToggled: if (root.service) root.service.toggleTurbo()
               }
             }
           }
 
-          Card {
-            edge: root.powerCursor >= root.constraints.length ? root.accent : Util.alpha(root.fg, 0.15)
+          Column {
+            id: settingsColumn
+            width: parent.width
+            spacing: Style.space(12)
+            visible: root.settingsOpen
 
-            SwitchTile {
-              width: parent.width
-              icon: "󰓅"
-              title: "Intel turbo"
-              detail: root.hw.turbo.available ? "Boost above base clock. Off runs cooler and quieter." : "no_turbo is not readable on this machine"
-              checked: root.hw.turbo.enabled
-              enabled: root.hw.turbo.available && root.available
-              onToggled: if (root.service) root.service.toggleTurbo()
+            Card {
+              CardTitle { title: "BAR WIDGET" }
+
+              Text {
+                width: parent.width
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                text: "What the bar shows. Pick any, in this order. Each reading gets its own icon."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Flow {
+                width: parent.width
+                spacing: Style.space(4)
+
+                Repeater {
+                  model: Model.BAR_ITEMS
+
+                  Button {
+                    required property var modelData
+                    readonly property bool on: Model.parseBarItems(root.dDisplay).indexOf(modelData.id) !== -1
+                    iconText: modelData.glyph
+                    text: modelData.label
+                    selected: on
+                    bordered: true
+                    focusable: true
+                    foreground: root.fg
+                    accent: root.accent
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    tooltipText: on ? "Shown in the bar" : "Hidden"
+                    onClicked: root.dDisplay = Model.serializeBarItems(Model.toggleBarItem(root.dDisplay, modelData.id))
+                  }
+                }
+              }
+
+              Rectangle {
+                width: previewRow.implicitWidth + Style.space(20)
+                height: previewRow.implicitHeight + Style.space(10)
+                radius: Math.max(Style.cornerRadius, Style.space(3))
+                color: root.bar ? root.bar.background : Color.background
+                border.color: Util.alpha(root.fg, 0.2)
+                border.width: Style.normalBorderWidth
+
+                Row {
+                  id: previewRow
+                  anchors.centerIn: parent
+                  spacing: Style.space(10)
+
+                  Repeater {
+                    model: Model.barView(root.hw, root.health, root.dDisplay, root.hotTemp).segments
+
+                    Row {
+                      required property var modelData
+                      spacing: Style.space(4)
+
+                      Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        text: modelData.glyph
+                        color: modelData.alert ? root.urgentColor : (root.bar ? root.bar.foreground : root.fg)
+                        font.family: root.fontFamily
+                        font.pixelSize: modelData.id === "logo" ? Style.bar.iconFont : Math.round(Style.bar.iconFont * 0.8)
+                      }
+
+                      Text {
+                        visible: modelData.text !== ""
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        text: modelData.text
+                        color: modelData.alert ? root.urgentColor : (root.bar ? root.bar.foreground : root.fg)
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                      }
+                    }
+                  }
+                }
+              }
+
+              Row {
+                width: parent.width
+                spacing: Style.space(16)
+
+                Column {
+                  width: (parent.width - parent.spacing) / 2
+                  spacing: Style.space(6)
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: "Hot at (°C, 50 to 110)"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  TextField {
+                    id: sHot
+                    width: parent.width
+                    placeholderText: "90"
+                    foreground: root.fg
+                    font.family: root.fontFamily
+                    onTextChanged: root.dHot = text
+                    Keys.onPressed: function(event) { root.handleSettingsKey(event) }
+                  }
+                }
+
+                Column {
+                  width: (parent.width - parent.spacing) / 2
+                  spacing: Style.space(6)
+
+                  Text {
+                    textFormat: Text.PlainText
+                    text: "Poll every (seconds, 1 to 30)"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  TextField {
+                    id: sPoll
+                    width: parent.width
+                    placeholderText: "2"
+                    foreground: root.fg
+                    font.family: root.fontFamily
+                    onTextChanged: root.dPoll = text
+                    Keys.onPressed: function(event) { root.handleSettingsKey(event) }
+                  }
+                }
+              }
+
+              Text {
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: "Lighting switches (follow theme, battery on the power button) live on the Lighting tab."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
             }
-          }
-        }
 
-        Column {
-          id: settingsColumn
-          width: parent.width
-          spacing: Style.space(12)
-          visible: root.settingsOpen
-
-          Card {
-            CardTitle { title: "BAR WIDGET" }
-
-            Text {
+            Item {
               width: parent.width
-              wrapMode: Text.Wrap
-              textFormat: Text.PlainText
-              text: "What the bar shows. Pick any, in this order. Each reading gets its own icon."
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
+              implicitHeight: Math.max(settingsButtons.implicitHeight, settingsStatusText.implicitHeight)
 
-            Flow {
-              width: parent.width
-              spacing: Style.space(4)
-
-              Repeater {
-                model: Model.BAR_ITEMS
+              Row {
+                id: settingsButtons
+                spacing: Style.space(6)
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
 
                 Button {
-                  required property var modelData
-                  readonly property bool on: Model.parseBarItems(root.dDisplay).indexOf(modelData.id) !== -1
-                  iconText: modelData.glyph
-                  text: modelData.label
-                  selected: on
+                  iconText: "󰆓"
+                  text: "Save"
                   bordered: true
+                  selected: true
                   focusable: true
                   foreground: root.fg
                   accent: root.accent
                   fontFamily: root.fontFamily
                   fontSize: Style.font.caption
-                  tooltipText: on ? "Shown in the bar" : "Hidden"
-                  onClicked: root.dDisplay = Model.serializeBarItems(Model.toggleBarItem(root.dDisplay, modelData.id))
-                }
-              }
-            }
-
-            Rectangle {
-              width: previewRow.implicitWidth + Style.space(20)
-              height: previewRow.implicitHeight + Style.space(10)
-              radius: Math.max(Style.cornerRadius, Style.space(3))
-              color: root.bar ? root.bar.background : Color.background
-              border.color: Util.alpha(root.fg, 0.2)
-              border.width: Style.normalBorderWidth
-
-              Row {
-                id: previewRow
-                anchors.centerIn: parent
-                spacing: Style.space(10)
-
-                Repeater {
-                  model: Model.barView(root.hw, root.health, root.dDisplay, root.hotTemp).segments
-
-                  Row {
-                    required property var modelData
-                    spacing: Style.space(4)
-
-                    Text {
-                      anchors.verticalCenter: parent.verticalCenter
-                      textFormat: Text.PlainText
-                      text: modelData.glyph
-                      color: modelData.alert ? root.urgentColor : (root.bar ? root.bar.foreground : root.fg)
-                      font.family: root.fontFamily
-                      font.pixelSize: modelData.id === "logo" ? Style.bar.iconFont : Math.round(Style.bar.iconFont * 0.8)
-                    }
-
-                    Text {
-                      visible: modelData.text !== ""
-                      anchors.verticalCenter: parent.verticalCenter
-                      textFormat: Text.PlainText
-                      text: modelData.text
-                      color: modelData.alert ? root.urgentColor : (root.bar ? root.bar.foreground : root.fg)
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                    }
-                  }
-                }
-              }
-            }
-
-            Row {
-              width: parent.width
-              spacing: Style.space(16)
-
-              Column {
-                width: (parent.width - parent.spacing) / 2
-                spacing: Style.space(6)
-
-                Text {
-                  textFormat: Text.PlainText
-                  text: "Hot at (°C, 50 to 110)"
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
+                  tooltipText: "Enter"
+                  onClicked: root.saveSettings()
                 }
 
-                TextField {
-                  id: sHot
-                  width: parent.width
-                  placeholderText: "90"
+                Button {
+                  text: "Cancel"
+                  bordered: true
+                  focusable: true
                   foreground: root.fg
-                  font.family: root.fontFamily
-                  onTextChanged: root.dHot = text
-                  Keys.onPressed: function(event) { root.handleSettingsKey(event) }
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  tooltipText: "Esc"
+                  onClicked: root.closeSettings()
                 }
               }
 
-              Column {
-                width: (parent.width - parent.spacing) / 2
-                spacing: Style.space(6)
-
-                Text {
-                  textFormat: Text.PlainText
-                  text: "Poll every (seconds, 1 to 30)"
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-
-                TextField {
-                  id: sPoll
-                  width: parent.width
-                  placeholderText: "2"
-                  foreground: root.fg
-                  font.family: root.fontFamily
-                  onTextChanged: root.dPoll = text
-                  Keys.onPressed: function(event) { root.handleSettingsKey(event) }
-                }
+              Text {
+                id: settingsStatusText
+                textFormat: Text.PlainText
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(0, parent.width - settingsButtons.implicitWidth - Style.space(10))
+                horizontalAlignment: Text.AlignRight
+                wrapMode: Text.Wrap
+                text: root.settingsStatus || "Saved to shell.json"
+                color: root.settingsError ? root.urgentColor : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
               }
-            }
-
-            Text {
-              width: parent.width
-              wrapMode: Text.Wrap
-              text: "Lighting switches (follow theme, battery on the power button) live on the Lighting tab."
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
             }
           }
 
-          Item {
+          Text {
             width: parent.width
-            implicitHeight: Math.max(settingsButtons.implicitHeight, settingsStatusText.implicitHeight)
-
-            Row {
-              id: settingsButtons
-              spacing: Style.space(6)
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-
-              Button {
-                iconText: "󰆓"
-                text: "Save"
-                bordered: true
-                selected: true
-                focusable: true
-                foreground: root.fg
-                accent: root.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                tooltipText: "Enter"
-                onClicked: root.saveSettings()
-              }
-
-              Button {
-                text: "Cancel"
-                bordered: true
-                focusable: true
-                foreground: root.fg
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                tooltipText: "Esc"
-                onClicked: root.closeSettings()
-              }
-            }
-
-            Text {
-              id: settingsStatusText
-              textFormat: Text.PlainText
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              width: Math.max(0, parent.width - settingsButtons.implicitWidth - Style.space(10))
-              horizontalAlignment: Text.AlignRight
-              wrapMode: Text.Wrap
-              text: root.settingsStatus || "Saved to shell.json"
-              color: root.settingsError ? root.urgentColor : root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
+            textFormat: Text.PlainText
+            visible: root.service ? root.service.actionStatus !== "" : false
+            text: root.service ? root.service.actionStatus : ""
+            color: root.service && root.service.actionError ? root.urgentColor : root.fg
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.Wrap
           }
-        }
 
-        Text {
-          width: parent.width
-          textFormat: Text.PlainText
-          visible: root.service ? root.service.actionStatus !== "" : false
-          text: root.service ? root.service.actionStatus : ""
-          color: root.service && root.service.actionError ? root.urgentColor : root.fg
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          wrapMode: Text.Wrap
-        }
-
-        Text {
-          width: parent.width
-          textFormat: Text.PlainText
-          text: root.footerText
-          color: Qt.darker(root.fg, 1.8)
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.footerText
+            color: Qt.darker(root.fg, 1.8)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
+          }
         }
       }
     }
@@ -1987,7 +2017,7 @@ Panel {
     property string name: ""
     property string caption: ""
     property bool alignRight: false
-    implicitWidth: Style.space(118)
+    implicitWidth: endRow.implicitWidth
     width: implicitWidth
     implicitHeight: endRow.implicitHeight
 
@@ -2001,8 +2031,8 @@ Panel {
 
       Rectangle {
         anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(30)
-        height: Style.space(30)
+        width: Style.space(18)
+        height: Style.space(18)
         radius: width / 2
         color: endChip.hex ? Model.hexPreview(endChip.hex) : "transparent"
         border.color: Util.alpha(root.fg, 0.25)
@@ -2010,39 +2040,23 @@ Panel {
         Behavior on color { ColorAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
       }
 
-      Column {
+      Text {
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(1)
+        textFormat: Text.PlainText
+        text: ThemeFx.prettyName(endChip.name) || "-"
+        color: root.fg
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+      }
 
-        Text {
-          anchors.right: endChip.alignRight ? parent.right : undefined
-          textFormat: Text.PlainText
-          text: endChip.caption
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
-          font.letterSpacing: 1.2
-        }
-
-        Text {
-          anchors.right: endChip.alignRight ? parent.right : undefined
-          textFormat: Text.PlainText
-          text: ThemeFx.prettyName(endChip.name) || "-"
-          color: root.fg
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-        }
-
-        Text {
-          anchors.right: endChip.alignRight ? parent.right : undefined
-          textFormat: Text.PlainText
-          text: endChip.hex ? "#" + endChip.hex : ""
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: endChip.hex ? "#" + endChip.hex : ""
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
       }
     }
   }
@@ -2051,15 +2065,15 @@ Panel {
     id: chip
     property string regionId: ""
     property string label: ""
-    property string icon: ""
+    property string fullName: ""
     property string shortcut: ""
     property string hex: ""
     property bool lightOn: true
     property bool battery: false
     signal clicked()
     readonly property color lit: chip.hex ? Model.hexPreview(chip.hex) : root.dim
-    implicitHeight: chipCol.implicitHeight + Style.space(16)
-    radius: Math.max(Style.cornerRadius, Style.space(4))
+    implicitHeight: Style.space(30)
+    radius: height / 2
     color: chip.lightOn ? Util.alpha(chip.lit, chipArea.containsMouse ? 0.22 : 0.14) : (chipArea.containsMouse ? Util.alpha(root.fg, 0.06) : "transparent")
     border.color: chip.lightOn ? Util.alpha(chip.lit, 0.7) : Util.alpha(root.fg, 0.15)
     border.width: Style.normalBorderWidth
@@ -2077,66 +2091,51 @@ Panel {
     }
 
     PanelToolTip {
-      visible: chipArea.containsMouse && chip.battery
-      text: "Shows battery state while Battery on power is on"
+      visible: chipArea.containsMouse
+      text: chip.fullName + (chip.lightOn ? (chip.battery ? " · shows battery state" : (chip.hex ? " · #" + chip.hex : "")) : " · off") + " (" + chip.shortcut + ")"
     }
 
-    Column {
-      id: chipCol
-      x: Style.space(10)
-      y: Style.space(8)
-      width: chip.width - Style.space(20)
-      spacing: Style.space(4)
+    Rectangle {
+      id: chipDot
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(9)
+      height: width
+      radius: width / 2
+      color: chip.lightOn ? chip.lit : "transparent"
+      border.color: chip.lightOn ? Util.alpha(root.fg, 0.25) : root.dim
+      border.width: Style.normalBorderWidth
+      Behavior on color { ColorAnimation { duration: Style.duration(140); easing.type: Easing.OutCubic } }
+    }
 
-      Item {
-        width: parent.width
-        implicitHeight: Math.max(chipIcon.implicitHeight, chipKey.implicitHeight)
+    Text {
+      anchors.left: chipDot.right
+      anchors.leftMargin: Style.space(6)
+      anchors.right: chipKey.left
+      anchors.rightMargin: Style.space(4)
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: chip.label
+      color: chip.lightOn ? root.fg : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: chip.lightOn
+      font.strikeout: !chip.lightOn
+      elide: Text.ElideRight
+    }
 
-        Text {
-          id: chipIcon
-          anchors.left: parent.left
-          anchors.verticalCenter: parent.verticalCenter
-          textFormat: Text.PlainText
-          text: chip.icon
-          color: chip.lightOn ? chip.lit : root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.title
-          Behavior on color { ColorAnimation { duration: Style.duration(140); easing.type: Easing.OutCubic } }
-        }
-
-        Text {
-          id: chipKey
-          anchors.right: parent.right
-          anchors.verticalCenter: parent.verticalCenter
-          textFormat: Text.PlainText
-          text: chip.shortcut
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
-      }
-
-      Text {
-        width: parent.width
-        textFormat: Text.PlainText
-        text: chip.label
-        color: root.fg
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-        elide: Text.ElideRight
-      }
-
-      Text {
-        width: parent.width
-        textFormat: Text.PlainText
-        text: !chip.lightOn ? "Off" : (chip.battery ? "Battery" : (chip.hex ? "#" + chip.hex : "On"))
-        color: chip.lightOn ? root.fg : root.dim
-        opacity: 0.8
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        elide: Text.ElideRight
-      }
+    Text {
+      id: chipKey
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: chip.shortcut
+      color: root.dim
+      opacity: 0.7
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
     }
   }
 
@@ -2145,9 +2144,10 @@ Panel {
     property string label: ""
     property string hex: ""
     property bool selected: false
+    property bool compact: false
     signal clicked()
-    implicitWidth: farRow.implicitWidth + Style.space(16)
-    implicitHeight: farRow.implicitHeight + Style.space(10)
+    implicitHeight: Style.space(26)
+    implicitWidth: far.compact && far.hex !== "" ? implicitHeight : farRow.implicitWidth + Style.space(16)
     radius: height / 2
     color: far.selected ? Util.alpha(root.accent, 0.18) : (farArea.containsMouse ? Util.alpha(root.fg, 0.08) : "transparent")
     border.color: far.selected ? root.accent : Util.alpha(root.fg, 0.18)
@@ -2162,8 +2162,23 @@ Panel {
       onClicked: far.clicked()
     }
 
+    PanelToolTip {
+      visible: far.compact && farArea.containsMouse
+      text: "Far end: " + far.label
+    }
+
+    Rectangle {
+      visible: far.compact && far.hex !== ""
+      anchors.centerIn: parent
+      width: Style.space(14)
+      height: width
+      radius: width / 2
+      color: far.hex ? Model.hexPreview(far.hex) : "transparent"
+    }
+
     Row {
       id: farRow
+      visible: !(far.compact && far.hex !== "")
       anchors.centerIn: parent
       spacing: Style.space(6)
 

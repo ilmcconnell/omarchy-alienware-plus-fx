@@ -33,7 +33,7 @@ Rectangle {
   readonly property color offLegend: "#34343c"
 
   readonly property real pad: Style.space(8)
-  readonly property real keyHeight: Style.space(30)
+  property real keyHeight: Style.space(30)
   readonly property real rowGap: Style.space(4)
   readonly property real keyGap: Style.space(4)
   readonly property real mediaWidth: Style.space(46)
