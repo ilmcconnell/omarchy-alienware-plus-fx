@@ -152,10 +152,58 @@ Panel {
     return Model.normalizeHex(root.themePlan.regions[id])
   }
 
-  function toggleThemeRegion(index) {
+  property string selectedLight: "power"
+  property bool lightEditing: false
+  readonly property var regionModes: root.service ? root.service.regionModes : ({})
+  readonly property string lightMode: root.regionModes[root.selectedLight] || "theme"
+  readonly property bool lightPickerShown: root.lightEditing && root.lightMode === "custom"
+  readonly property string lightPreviewHex: root.lightMode === "off" ? "" : root.themeRegionHex(root.selectedLight)
+  readonly property var selectedLightEntry: {
+    for (var i = 0; i < root.themeChassisOrder.length; i++) if (root.themeChassisOrder[i].id === root.selectedLight) return root.themeChassisOrder[i]
+    return root.themeChassisOrder[0]
+  }
+  readonly property var lightModeOptions: {
+    var opts = [{ value: "theme", label: "󰏘  Theme" }, { value: "custom", label: "󰉦  Colour" }]
+    if (root.selectedLight === "power") opts.push({ value: "battery", label: "󰁹  Battery" })
+    opts.push({ value: "off", label: "󰐥  Off" })
+    return opts
+  }
+
+  function selectLight(id) {
+    if (root.selectedLight === id) return
+    root.selectedLight = id
+    root.lightEditing = root.lightEditing && root.lightMode === "custom"
+  }
+
+  function chooseLightMode(mode) {
+    if (!root.service) return
+    root.service.setRegionMode(root.selectedLight, mode)
+    root.lightEditing = mode === "custom"
+    if (root.lightEditing) Qt.callLater(root.revealLightPicker)
+  }
+
+  function cycleLightMode() {
+    var modes = root.service ? root.service.modesFor(root.selectedLight) : []
+    if (!modes.length) return
+    chooseLightMode(modes[(modes.indexOf(root.lightMode) + 1) % modes.length])
+  }
+
+  function toggleLightEditor() {
+    root.lightEditing = !root.lightEditing
+    if (root.lightEditing) Qt.callLater(root.revealLightPicker)
+  }
+
+  function toggleSelectedLight() {
+    if (root.service) root.service.toggleRegionOn([root.selectedLight])
+  }
+
+  function revealLightPicker() {
+    panelFlick.contentY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
+  }
+
+  function selectThemeLight(index) {
     var entry = root.themeChassisOrder[index]
-    if (!entry || !root.service) return
-    root.service.toggleRegionOn([entry.id])
+    if (entry) root.selectLight(entry.id)
   }
 
   readonly property var regionPoweredMap: Model.normalizeRegionOnMap(root.service ? root.service.regionOn : null)
@@ -214,6 +262,7 @@ Panel {
 
   onRgbSubTabChanged: {
     panelFlick.contentY = 0
+    lightEditing = false
     if (!root.rgbSubTabLoaded) return
     rgbSubTabSaveTimer.restart()
   }
@@ -511,7 +560,7 @@ Panel {
       var rgbParts = ["h/l tab"]
       if (kbdPresent) rgbParts.push("H/L surface")
       if (rgbSubTabEffective === "theme") {
-        rgbParts.push("t match", "d direction", "w swap", "[/] intensity", "-/+ keys dim", "1-4 chassis", "a all chassis", "b battery", "esc")
+        rgbParts.push("t match", "d direction", "w swap", "[/] intensity", "-/+ keys dim", "1-4 pick light", "p light mode", "c light colour", "x light on/off", "a all", "esc")
         return rgbParts.join(" · ")
       }
       if (rgbSubTabEffective === "chassis") { rgbParts.push("j/k region", "space select", "a/x regions", "i identify") }
@@ -568,11 +617,14 @@ Panel {
       case "_": service.nudgeThemeKbdBrightness(-5); break
       case "+": service.nudgeThemeKbdBrightness(5); break
       case "=": service.nudgeThemeKbdBrightness(5); break
-      case "1": toggleThemeRegion(0); break
-      case "2": toggleThemeRegion(1); break
-      case "3": toggleThemeRegion(2); break
-      case "4": toggleThemeRegion(3); break
+      case "1": selectThemeLight(0); break
+      case "2": selectThemeLight(1); break
+      case "3": selectThemeLight(2); break
+      case "4": selectThemeLight(3); break
+      case "x": toggleSelectedLight(); break
       case "a": service.setAllRegionsOn(root.allChassisOff); break
+      case "p": cycleLightMode(); break
+      case "c": if (root.lightMode !== "custom") chooseLightMode("custom"); else toggleLightEditor(); break
       default: break
       }
       return
@@ -1497,7 +1549,7 @@ Panel {
                 powerColor: root.themeRegionHex("power") !== "" && root.isRegionOn("power") ? Model.hexPreview(root.themeRegionHex("power")) : root.dim
                 powerLit: root.themeRegionHex("power") !== "" && root.isRegionOn("power")
                 powerSelected: false
-                onPowerClicked: if (root.service) root.service.toggleRegionOn(["power"])
+                onPowerClicked: root.selectLight("power")
                 Behavior on opacity { NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic } }
               }
 
@@ -1585,8 +1637,10 @@ Panel {
                         hex: root.themeRegionHex(modelData.id)
                         lightOn: root.isRegionOn(modelData.id)
                         battery: modelData.id === "power" && root.batteryOnPower
+                        custom: root.regionModes[modelData.id] === "custom"
+                        selected: root.selectedLight === modelData.id
                         enabled: root.rgbConnected
-                        onClicked: if (root.service) root.service.toggleRegionOn([modelData.id])
+                        onClicked: root.selectLight(modelData.id)
                       }
                     }
                   }
@@ -1604,6 +1658,101 @@ Panel {
                     fontSize: Style.font.caption
                     tooltipText: "Turn every chassis light on or off (a)"
                     onClicked: if (root.service) root.service.setAllRegionsOn(root.allChassisOff)
+                  }
+                }
+
+                Item {
+                  width: parent.width
+                  implicitHeight: Math.max(powerLabel.implicitHeight, powerModeGroup.implicitHeight)
+
+                  Text {
+                    id: powerLabel
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: chassisLabel.implicitWidth
+                    textFormat: Text.PlainText
+                    text: root.selectedLightEntry.label
+                    color: root.fg
+                    elide: Text.ElideRight
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+
+                  ButtonGroup {
+                    id: powerModeGroup
+                    anchors.left: powerLabel.right
+                    anchors.leftMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    options: root.lightModeOptions
+                    value: root.lightMode
+                    foreground: root.fg
+                    accent: root.accent
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.caption
+                    focusable: false
+                    onChanged: function(v) { root.chooseLightMode(v) }
+                  }
+
+                  Rectangle {
+                    id: powerSwatch
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitWidth: powerSwatchRow.implicitWidth + Style.space(16)
+                    width: implicitWidth
+                    height: Style.space(30)
+                    radius: height / 2
+                    color: powerSwatchArea.containsMouse && root.lightMode === "custom" ? Util.alpha(root.fg, 0.08) : "transparent"
+                    border.color: root.lightPickerShown ? root.accent : Util.alpha(root.fg, 0.18)
+                    border.width: Style.normalBorderWidth
+
+                    MouseArea {
+                      id: powerSwatchArea
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: root.lightMode === "custom" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                      onClicked: if (root.lightMode === "custom") root.toggleLightEditor()
+                    }
+
+                    PanelToolTip {
+                      visible: powerSwatchArea.containsMouse
+                      text: root.lightMode === "custom" ? (root.lightPickerShown ? "Hide the colour picker" : "Pick the " + root.selectedLightEntry.name.toLowerCase() + " colour") : (root.lightMode === "battery" ? "Shows the battery state" : (root.lightMode === "off" ? root.selectedLightEntry.name + " is off" : root.selectedLightEntry.name + " follows the theme"))
+                    }
+
+                    Row {
+                      id: powerSwatchRow
+                      anchors.centerIn: parent
+                      spacing: Style.space(6)
+
+                      Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Style.space(12)
+                        height: width
+                        radius: width / 2
+                        color: root.lightPreviewHex ? Model.hexPreview(root.lightPreviewHex) : "transparent"
+                        border.color: root.lightPreviewHex ? Util.alpha(root.fg, 0.25) : root.dim
+                        border.width: Style.normalBorderWidth
+                      }
+
+                      Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        text: root.lightPreviewHex ? "#" + root.lightPreviewHex : "off"
+                        color: root.lightPreviewHex ? root.fg : root.dim
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                      }
+
+                      Text {
+                        visible: root.lightMode === "custom"
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        text: root.lightPickerShown ? "󰅃" : "󰏫"
+                        color: root.dim
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                      }
+                    }
                   }
                 }
               }
@@ -1662,18 +1811,25 @@ Panel {
             ColorPicker {
               id: colorPicker
               width: parent.width
-              visible: root.rgbSubTabEffective !== "theme"
-              hex: root.pickedHex
+              visible: root.rgbSubTabEffective !== "theme" || root.lightPickerShown
+              hex: root.rgbSubTabEffective === "theme" ? (root.service ? (root.service.themeRegionColors[root.selectedLight] || "") : "") : root.pickedHex
+              showThemeAction: root.rgbSubTabEffective !== "theme"
               swatches: root.service ? root.service.themeSwatches : []
               themeEnabled: root.rgbConnected
-              canApply: root.rgbConnected && root.paintTarget !== ""
-              targetText: root.paintTarget
+              canApply: root.rgbSubTabEffective === "theme" ? root.rgbConnected : root.rgbConnected && root.paintTarget !== ""
+              targetText: root.rgbSubTabEffective === "theme" ? root.selectedLightEntry.name.toLowerCase() : root.paintTarget
               fg: root.fg
               dim: root.dim
               accent: root.accent
               fontFamily: root.fontFamily
-              onPicked: function(nextHex) { root.pickedHex = nextHex }
-              onApplyRequested: root.applyColorField()
+              onPicked: function(nextHex) {
+                if (root.rgbSubTabEffective === "theme") { if (root.service) root.service.setThemeRegionColor(root.selectedLight, nextHex) }
+                else root.pickedHex = nextHex
+              }
+              onApplyRequested: {
+                if (root.rgbSubTabEffective === "theme") { root.lightEditing = false; root.refocusPanel() }
+                else root.applyColorField()
+              }
               onThemeColorRequested: if (root.service) root.service.applyThemeColor()
               onFieldEscaped: root.refocusPanel()
             }
@@ -2070,13 +2226,15 @@ Panel {
     property string hex: ""
     property bool lightOn: true
     property bool battery: false
+    property bool custom: false
+    property bool selected: false
     signal clicked()
     readonly property color lit: chip.hex ? Model.hexPreview(chip.hex) : root.dim
     implicitHeight: Style.space(30)
     radius: height / 2
     color: chip.lightOn ? Util.alpha(chip.lit, chipArea.containsMouse ? 0.22 : 0.14) : (chipArea.containsMouse ? Util.alpha(root.fg, 0.06) : "transparent")
-    border.color: chip.lightOn ? Util.alpha(chip.lit, 0.7) : Util.alpha(root.fg, 0.15)
-    border.width: Style.normalBorderWidth
+    border.color: chip.selected ? root.fg : (chip.lightOn ? Util.alpha(chip.lit, 0.7) : Util.alpha(root.fg, 0.15))
+    border.width: chip.selected ? Math.max(2, Style.normalBorderWidth * 2) : Style.normalBorderWidth
     opacity: enabled ? 1.0 : 0.5
     Behavior on color { ColorAnimation { duration: Style.duration(140); easing.type: Easing.OutCubic } }
     Behavior on border.color { ColorAnimation { duration: Style.duration(140); easing.type: Easing.OutCubic } }
@@ -2092,7 +2250,7 @@ Panel {
 
     PanelToolTip {
       visible: chipArea.containsMouse
-      text: chip.fullName + (chip.lightOn ? (chip.battery ? " · shows battery state" : (chip.hex ? " · #" + chip.hex : "")) : " · off") + " (" + chip.shortcut + ")"
+      text: chip.fullName + (chip.lightOn ? (chip.battery ? " · battery" : (chip.custom ? " · your colour" : " · theme") + (chip.hex ? " #" + chip.hex : "")) : " · off") + " (" + chip.shortcut + ")"
     }
 
     Rectangle {
@@ -2131,7 +2289,7 @@ Panel {
       anchors.rightMargin: Style.space(10)
       anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
-      text: chip.shortcut
+      text: chip.custom && chip.lightOn ? "󰏫" : (chip.battery && chip.lightOn ? "󰁹" : chip.shortcut)
       color: root.dim
       opacity: 0.7
       font.family: root.fontFamily

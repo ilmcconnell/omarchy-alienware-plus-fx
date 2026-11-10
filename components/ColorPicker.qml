@@ -11,6 +11,7 @@ Rectangle {
   property var swatches: []
   property bool themeEnabled: true
   property bool canApply: false
+  property bool showThemeAction: true
   property string targetText: ""
   property color fg: Color.foreground
   property color dim: Qt.darker(fg, 1.5)
@@ -376,6 +377,7 @@ Rectangle {
             text: "Match theme"
             bordered: true
             enabled: root.themeEnabled
+            visible: root.showThemeAction
             foreground: root.fg
             accent: root.accent
             fontFamily: root.fontFamily

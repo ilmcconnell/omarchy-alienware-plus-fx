@@ -16,8 +16,15 @@ Lighting → Theme (or `H`/`L` until it is selected).
   - the far end is the most distant saturated hue in the theme
   - the two are blended in OkLCh with an S-curve and gamut fitting
 - It repaints by itself on `omarchy theme set`, because the plugin watches `theme.generation`.
-- **Chassis chips** turn the lid logo, ring top, ring bottom and power button on or off without
-  leaving theme mode. Keys `1`-`4` do the same, and `a` toggles them all.
+- **Chassis lights** (Logo, Ring ↑, Ring ↓, Power): click one, or press `1`-`4`, to select it. The row
+  below then sets that light on its own, while everything else keeps matching the theme:
+  - **Theme**: the colour from the gradient
+  - **Colour**: your own colour, picked with the colour wheel
+  - **Battery**: the power button only, shows the battery state
+  - **Off**
+
+  `p` cycles the selected light's mode, `c` opens its colour picker, `x` turns it off or on, and `a`
+  toggles every chassis light.
 - **Style** is either Gradient or Accent (every light gets the accent). **Direction** is one of
   ↘ ↙ → ↓. **Intensity** runs from -10 to +10. **Key brightness** dims only the keyboard. **Far end**
   is Auto or any colour from the theme. Keyboard shortcuts: `w` swaps the ends, `d` changes the
@@ -26,6 +33,8 @@ Lighting → Theme (or `H`/`L` until it is selected).
   Painting a key or region on the other tabs keeps the gradient you see and switches theme mode off.
 
 IPC: `omarchy-shell alienwarefx rgb <theme|theme-off|theme-toggle|chassis-off|chassis-on|axis|intensity> [value]`.
+Each chassis light is also an action: `rgb <power|logo|ring-top|ring-bottom> <theme|custom|off|RRGGBB>`.
+`battery` works for `power` only.
 
 
 Two parts: a Quickshell plugin that runs unprivileged, and `alienwarectl`, a Go binary that is both

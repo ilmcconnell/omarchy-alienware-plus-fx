@@ -143,6 +143,7 @@ Item {
   property int themeKbdBrightness: 100
   property bool themeSwap: false
   property string themeFar: ""
+  property var themeRegionColors: ({})
 
   readonly property var themePlan: ThemeFx.plan(themeRawText, {
     style: themeStyle,
@@ -151,6 +152,7 @@ Item {
     brightness: themeKbdBrightness,
     swap: themeSwap,
     far: themeFar,
+    regions: themeRegionColors,
     accent: themeHex
   })
   readonly property bool themeActive: themeSync && themePlan.ok
@@ -201,6 +203,7 @@ Item {
     themeKbdBrightness = parsed.theme.brightness
     themeSwap = parsed.theme.swap
     themeFar = parsed.theme.far
+    themeRegionColors = parsed.theme.regions
     batterySync = parsed.batterySync !== false
     curveInterval = parsed.curve.interval
     curveHysteresis = parsed.curve.hysteresis
@@ -262,7 +265,7 @@ Item {
       lightsOn: lightsOn,
       themeSync: themeSync,
       batterySync: batterySync,
-      theme: { style: themeStyle, axis: themeAxis, intensity: themeIntensity, brightness: themeKbdBrightness, swap: themeSwap, far: themeFar },
+      theme: { style: themeStyle, axis: themeAxis, intensity: themeIntensity, brightness: themeKbdBrightness, swap: themeSwap, far: themeFar, regions: themeRegionColors },
       curve: { interval: curveInterval, hysteresis: curveHysteresis, cpu: curveCpu, gpu: curveGpu }
     })))
   }
@@ -1047,6 +1050,65 @@ Item {
     return true
   }
 
+  readonly property var lightModes: ["theme", "custom", "battery", "off"]
+
+  readonly property var regionModes: {
+    var out = {}
+    var ids = Model.regionIds()
+    var on = regionOn || {}
+    var custom = themeRegionColors || {}
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i]
+      if (on[id] === false) out[id] = "off"
+      else if (id === "power" && batterySync) out[id] = "battery"
+      else out[id] = Model.normalizeHex(custom[id]) !== "" ? "custom" : "theme"
+    }
+    return out
+  }
+  readonly property string powerMode: regionModes["power"] || "theme"
+
+  function modesFor(id) {
+    return id === "power" ? lightModes : ["theme", "custom", "off"]
+  }
+
+  function setThemeRegionColor(id, hex) {
+    if (Model.regionIds().indexOf(id) < 0) return false
+    var next = {}
+    for (var k in themeRegionColors) next[k] = themeRegionColors[k]
+    next[id] = Model.normalizeHex(hex)
+    themeRegionColors = next
+    themeSettingChanged()
+    return true
+  }
+
+  function setRegionMode(id, mode) {
+    var m = String(mode || "")
+    if (Model.regionIds().indexOf(id) < 0 || modesFor(id).indexOf(m) < 0) return false
+    if (m === "off") return setRegionOn([id], false)
+    if (regionOn && regionOn[id] === false) setRegionOn([id], true)
+    if (m === "battery") {
+      if (!batterySync) setBatterySync(true)
+      return true
+    }
+    if (id === "power" && batterySync) batterySync = false
+    var current = Model.normalizeHex(themeRegionColors[id])
+    if (m === "theme") setThemeRegionColor(id, "")
+    else if (!current) setThemeRegionColor(id, themePlan.themeRegions[id] || Model.normalizeHex(themeHex) || "FFFFFF")
+    else themeSettingChanged()
+    pushChassis(m === "theme" ? "Light follows the theme" : "Light colour")
+    return true
+  }
+
+  function cycleRegionMode(id, direction) {
+    var modes = modesFor(id)
+    var i = modes.indexOf(regionModes[id] || "theme")
+    var step = direction < 0 ? -1 : 1
+    return setRegionMode(id, modes[(i + step + modes.length) % modes.length])
+  }
+
+  function setPowerMode(mode) { return setRegionMode("power", mode) }
+  function setThemePower(hex) { return setThemeRegionColor("power", hex) }
+
   function setAllRegionsOn(on) {
     return setRegionOn(Model.regionIds(), on === true)
   }
@@ -1175,7 +1237,7 @@ Item {
           brightness: root.brightness,
           color: root.color,
           themeSync: root.themeSync,
-          theme: { name: root.themeName, style: root.themeStyle, axis: root.themeAxis, near: root.themePlan.near, far: root.themePlan.far, nearName: root.themePlan.nearName, farName: root.themePlan.farName },
+          theme: { name: root.themeName, style: root.themeStyle, axis: root.themeAxis, near: root.themePlan.near, far: root.themePlan.far, nearName: root.themePlan.nearName, farName: root.themePlan.farName, modes: root.regionModes, custom: root.themeRegionColors },
           regions: Model.regionColorPayload(root.activeRegionColors())
         },
         warnings: root.status.warnings,
@@ -1223,6 +1285,11 @@ Item {
       if (a === "intensity") return root.setThemeIntensity(parseInt(value, 10)) ? "ok" : root.actionStatus
       if (a === "chassis-off") return root.setAllRegionsOn(false) ? "ok" : root.actionStatus
       if (a === "chassis-on") return root.setAllRegionsOn(true) ? "ok" : root.actionStatus
+      if (Model.regionIds().indexOf(a) >= 0) {
+        var hex = Model.normalizeHex(value)
+        if (hex) return root.setThemeRegionColor(a, hex) && root.setRegionMode(a, "custom") ? "ok" : root.actionStatus
+        return root.setRegionMode(a, String(value || "").toLowerCase()) ? "ok" : "use " + root.modesFor(a).join(", ") + " or RRGGBB"
+      }
       if (a === "identify") return root.identifyRegion(value) ? "ok" : root.actionStatus
       if (a === "reload" || a === "") { root.refreshRgb(); return "ok" }
       return "unknown rgb action"

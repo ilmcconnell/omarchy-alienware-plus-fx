@@ -166,10 +166,26 @@ test("intensityLabel is signed", () => {
 
 test("state round trips the theme settings and defaults old files", () => {
   const old = Model.parseState(JSON.stringify({ version: 2, themeSync: true }))
-  assert.deepEqual(old.theme, { style: "gradient", axis: "tl-br", intensity: 0, brightness: 100, swap: false, far: "" })
-  const theme = { style: "accent", axis: "lr", intensity: -4, brightness: 35, swap: true, far: "magenta" }
+  assert.deepEqual(old.theme, { style: "gradient", axis: "tl-br", intensity: 0, brightness: 100, swap: false, far: "", regions: { power: "", logo: "", "ring-top": "", "ring-bottom": "" } })
+  const theme = { style: "accent", axis: "lr", intensity: -4, brightness: 35, swap: true, far: "magenta", regions: { power: "FF0040", logo: "", "ring-top": "00FF00", "ring-bottom": "" } }
   const saved = Model.buildStatePayload({ theme: theme, themeSync: true })
   assert.deepEqual(Model.parseState(JSON.stringify(saved)).theme, theme)
-  const bad = Model.normalizeThemeSettings({ style: "x", axis: "y", intensity: 99, brightness: -5, far: "<img>" })
-  assert.deepEqual(bad, { style: "gradient", axis: "tl-br", intensity: 10, brightness: 0, swap: false, far: "" })
+  const bad = Model.normalizeThemeSettings({ style: "x", axis: "y", intensity: 99, brightness: -5, far: "<img>", power: "nothex" })
+  assert.deepEqual(bad, { style: "gradient", axis: "tl-br", intensity: 10, brightness: 0, swap: false, far: "", regions: { power: "", logo: "", "ring-top": "", "ring-bottom": "" } })
+  assert.equal(Model.normalizeThemeSettings({ power: "#abc" }).regions.power, "AABBCC")
+})
+
+test("custom chassis colours override only their own light", () => {
+  const base = ThemeFx.plan(TOKYO, {})
+  const custom = ThemeFx.plan(TOKYO, { regions: { power: "#ff0040", "ring-top": "00ff00" } })
+  assert.equal(custom.regions.power, "FF0040")
+  assert.equal(custom.regions["ring-top"], "00FF00")
+  assert.equal(custom.custom.power, true)
+  assert.equal(custom.custom.logo, false)
+  assert.equal(custom.themeRegions.power, base.regions.power)
+  assert.deepEqual(custom.keys, base.keys)
+  for (const id of ["logo", "ring-bottom"]) assert.equal(custom.regions[id], base.regions[id])
+  assert.equal(ThemeFx.plan(TOKYO, { style: "accent", regions: { logo: "00FF00" } }).regions.logo, "00FF00")
+  assert.equal(ThemeFx.plan(TOKYO, { regions: { logo: "bogus" } }).custom.logo, false)
+  assert.equal(ThemeFx.plan(TOKYO, { power: "123456" }).regions.power, "123456")
 })

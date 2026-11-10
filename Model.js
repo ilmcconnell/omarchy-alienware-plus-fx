@@ -1408,8 +1408,21 @@ function normalizeThemeSettings(raw) {
     intensity: clampInt(src.intensity, -10, 10, 0),
     brightness: src.brightness === undefined || src.brightness === null ? 100 : clampInt(src.brightness, 0, 100, 100),
     swap: src.swap === true,
-    far: /^[a-z0-9_]{1,32}$/.test(far) ? far : ""
+    far: /^[a-z0-9_]{1,32}$/.test(far) ? far : "",
+    regions: normalizeThemeRegionColors(src.regions, src.power)
   }
+}
+
+function normalizeThemeRegionColors(raw, legacyPower) {
+  var src = isObject(raw) ? raw : {}
+  var ids = regionIds()
+  var out = {}
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i]
+    var value = src[id] !== undefined ? src[id] : (id === "power" ? legacyPower : "")
+    out[id] = normalizeHex(value)
+  }
+  return out
 }
 
 function parseState(raw) {

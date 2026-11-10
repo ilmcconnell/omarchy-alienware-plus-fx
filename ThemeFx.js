@@ -398,7 +398,7 @@ function farChoices(text) {
 }
 
 function emptyPlan() {
-  return { ok: false, style: DEFAULT_STYLE, axis: DEFAULT_AXIS, near: "", far: "", nearName: "", farName: "", rawNear: "", rawFar: "", keys: {}, regions: {} }
+  return { ok: false, style: DEFAULT_STYLE, axis: DEFAULT_AXIS, near: "", far: "", nearName: "", farName: "", rawNear: "", rawFar: "", keys: {}, regions: {}, themeRegions: {}, custom: {} }
 }
 
 function plan(text, opts) {
@@ -440,10 +440,25 @@ function plan(text, opts) {
     out.farName = out.nearName
     out.keys = solidKeys
     out.regions = solidRegions
-    return out
+    return withOverrides(out, o.regions, o.power)
   }
   out.keys = renderKeyboard(near, far, out.axis)
   out.regions = chassisColors(shape(ends[0].rgb, intensity, 100), shape(ends[1].rgb, intensity, 100), out.axis)
+  return withOverrides(out, o.regions, o.power)
+}
+
+function withOverrides(out, overrides, legacyPower) {
+  var src = overrides && typeof overrides === "object" ? overrides : {}
+  var ids = Model.regionIds()
+  out.themeRegions = {}
+  out.custom = {}
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i]
+    out.themeRegions[id] = out.regions[id] || ""
+    var hex = Model.normalizeHex(src[id] !== undefined ? src[id] : (id === "power" ? legacyPower : ""))
+    out.custom[id] = hex !== ""
+    if (hex) out.regions[id] = hex
+  }
   return out
 }
 
