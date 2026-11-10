@@ -26,7 +26,7 @@ echo
 if [ ! -d "${pkgdir}" ]; then
   echo "Cannot find ${pkgdir}"
   echo "Install the plugin first:"
-  echo "  omarchy plugin add https://github.com/chr0nzz/omarchy-alienware.git --enable"
+  echo "  omarchy plugin add https://github.com/ilmcconnell/omarchy-alienware-plus-fx.git --enable"
   exit 1
 fi
 

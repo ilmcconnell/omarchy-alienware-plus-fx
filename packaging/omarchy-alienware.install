@@ -9,7 +9,7 @@ The alienwarectl helper is installed. One step remains.
 The bar plugin is installed separately through Omarchy, which clones it as a
 real directory. A symlink will not work, the shell's watcher does not follow one.
 
-  omarchy plugin add https://github.com/chr0nzz/omarchy-alienware.git --enable
+  omarchy plugin add https://github.com/ilmcconnell/omarchy-alienware-plus-fx.git --enable
 MSG
 }
 
